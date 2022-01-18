@@ -2,31 +2,127 @@
 
 #include "gauge_BQ4050.h"
 
-#define TAG "PowerGauge"
 
-static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size) {
+/* Local defines */
+// debug
+#define TAG                     "PowerGauge"
+// bq4050
+#define BQ4050_SENSOR_ADDR      0x16
+#define MAC_BLOCK_COMMAND       0x44
+#define GOLDEN_FILE_SIZE        8192
+#define FLASH_BLOCK_SIZE        32
+#define NUM_FLASH_WRITES        GOLDEN_FILE_SIZE / FLASH_BLOCK_SIZE
+#define MAX_WRITE_RETRIES       100
+
+typedef enum {
+    MAC_DEVICETYPE = 0x0001,                        // Read only
+    MAC_FIRMWAREVERSION = 0x0002,                   // Read only
+    MAC_HARDWAREVERSION = 0x0003,                   // Read only
+    MAC_IFCHECKSUM = 0x0004,                        // Read only
+    MAC_STATICDFSIGNATURE = 0x0005,                 // Read only
+    MAC_AIIDFSIGNATURE = 0x0009,                    // Read only
+    MAC_SHUTDOWNMODE = 0x0010,                      // Write only
+    MAC_SLEEPMODE = 0x0011,                         // Write only
+    MAC_FUSETOGGLE = 0x001D,                        // Write only
+    MAC_PRECHARGEFET = 0x001E,                      // Write only
+    MAC_CHARGEFET = 0x001F,                         // Write only
+    MAC_DISCHARGEFET = 0x0020,                      // Write only
+    MAC_FETCONTROL = 0x0022,                        // Write only
+    MAC_LIFETIMEDATACOLLECTION = 0x0023,            // Write only
+    MAC_PERMANENTFAILURE = 0x0024,                  // Write only
+    MAC_BLACKBOXRECORDERRESET = 0x002A,             // Write only
+    MAC_CALIBRATIONMODE = 0x002D,                   // Write only
+    MAC_SEALDEVICE = 0x0030,                        // Write only
+    MAC_SECURITYKEYS = 0x0035,                      // R/W
+    MAC_AUTHENTICATIONKEY = 0x0037,                 // R/W
+    MAC_DEVICERESET = 0x0041,                       // Write only
+    MAC_SAFETYALERT = 0x0050,                       // Read only
+    MAC_SAFETYSTATUS = 0x0051,                      // Read only
+    MAC_PFALERT = 0x0052,                           // Read only
+    MAC_PFSTATUS = 0x0053,                          // Read only
+    MAC_OPERATIONSTATUS = 0x0054,                   // Read only
+    MAC_CHARGINGSTATUS = 0x0055,                    // Read only
+    MAC_GAUGINGSTATUS = 0x0056,                     // Read only
+    MAC_MANUFACTURINGSTATUS = 0x0057,               // Read only
+    MAC_AFEREGISTER = 0x0058,                       // Read only
+    MAC_LIFETIMEDATABLOCK1 = 0x0060,                // Read only
+    MAC_LIFETIMEDATABLOCK2 = 0x0061,                // Read only
+    MAC_LIFETIMEDATABLOCK3 = 0x0062,                // Read only
+    MAC_LIFETIMEDATABLOCK4 = 0x0063,                // Read only
+    MAC_LIFETIMEDATABLOCK5 = 0x0064,                // Read only
+    MAC_MANUFACTURERINFO = 0x0070,                  // Read only
+    MAC_DASTATUS1 = 0x0071,                         // Read only
+    MAC_DASTATUS2 = 0x0072,                         // Read only
+    MAC_MANUFACTURERINFO2 = 0x007A,                 // Read only
+    MAC_ROMMODE = 0x0F00,                           // Write only
+    MAC_EXITCALIBRATIONOUTPUT = 0xF080,             // R/W
+    MAC_OUTPUTCCANDADCFORCALIBRATION = 0xF081,      // R/W
+    MAC_OUTPUTSHORTEDCCANDADCFORCALIBR = 0xF082,    // R/W
+} MACCommand_t;
+
+
+
+static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size) 
+{
+    /**
+     * @brief SMBus Blosk Write protocol
+     * 1. Create i2c cmd link
+     * 2. Send slave Address with write bit set, ack
+     * 3. Send command code, ack
+     * 4. Send number of bytes that will follow, ack
+     * 5. send byte sequence each with ack
+     * 6. stop
+     * 7. destroy command link
+     * @param | 
+     */
+
     esp_err_t err = ESP_OK;
+
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
+
     ERROR_CHECK(TAG, err |= i2c_master_start(packet));
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true));
+
+    // Send slave Address with write bit set, ack
+    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_WRITE, true));
+
+    // Send command code, ack
     ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, size + 2, true));
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, *((uint8_t *) &command + 0), true));
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, *((uint8_t *) &command + 1), true));
-    if (data_in != NULL) {
-        ERROR_CHECK(TAG, err |= i2c_master_write(packet, data_in, size, true));
+
+    // Send number of bytes that will follow, ack
+    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, size + 2, true)); //
+
+    // send data, LSB first
+
+    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, *((uint8_t *) &command + 0), true)); // unsafe operation, memory may not be in little endian
+    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, *((uint8_t *) &command + 1), true)); // unsafe operation, memory may not be in little endian. 
+    
+    if (data_in != NULL) 
+    {
+        // expect data to be sent in a loop with ACKs or call i2c_master_cmd_begin() after
+        // check for null should be done prior to setting up the SMBus block write.
+        // if data_in is null despite size > 0, then the chip will remain in a state of waiting for more bytes that will never come
+        ERROR_CHECK(TAG, err |= i2c_master_write(packet, data_in, size, true)); 
     }
+    
     ERROR_CHECK(TAG, err |= i2c_master_stop(packet));
-    if (ESP_OK != err) {
+    
+    if (ESP_OK != err) 
+    {
+        //if this happens, we will exit without cleaning up the link instance.
         ESP_LOGW(TAG, "Error %u before I2C Command Begin", err);
         return err;
     }
+    
+    // flushing the data after sending the i2c stop
     ERROR_CHECK(TAG, err = i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(10000)));
-    if (ESP_OK != err) {
+    
+    if (ESP_OK != err) 
+    {
         ESP_LOGE(TAG, "Error @ I2C address %x", command);
     }
-//    vTaskDelay(pdMS_TO_TICKS(20));
+    
     i2c_cmd_link_delete(packet);
+    
     return err;
 }
 
@@ -70,10 +166,10 @@ static uint8_t gauge_MACRead(uint16_t command, uint8_t *data_out) {
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, &len, I2C_MASTER_ACK));
 
     ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, 10000 / portTICK_RATE_MS));
@@ -105,10 +201,10 @@ static void gauge_flashRead(uint16_t starting_address, uint8_t *data_out,uint8_t
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, &len, I2C_MASTER_ACK));
 
     ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, 10000 / portTICK_RATE_MS));
@@ -140,11 +236,11 @@ static uint16_t gauge_readWord(uint8_t command) {
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, command, true));
 
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 0), I2C_MASTER_ACK));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 1), I2C_MASTER_NACK));
     ERROR_CHECK(TAG, i2c_master_stop(packet));
