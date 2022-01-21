@@ -15,7 +15,7 @@ static void charger_writeByte(uint8_t regAddress, uint8_t data_in)
 	ERROR_CHECK(TAG,i2c_master_write_byte(packet, data_in, true));
 
 	ERROR_CHECK(TAG,i2c_master_stop(packet));
-	ERROR_CHECK(TAG,i2c_master_cmd_begin(PM_I2C_NUM, packet, 1000 / portTICK_RATE_MS));
+	ERROR_CHECK(TAG,i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ25703A_TIMOUT_MS)));
 	i2c_cmd_link_delete(packet);
 }
 
@@ -33,7 +33,7 @@ static uint8_t charger_readByte(uint8_t regAddress)
 	ERROR_CHECK(TAG,i2c_master_read_byte(packet, &data_out, I2C_MASTER_NACK));
 
 	ERROR_CHECK(TAG,i2c_master_stop(packet));
-	ERROR_CHECK(TAG,i2c_master_cmd_begin(PM_I2C_NUM, packet, 1000 / portTICK_RATE_MS));
+	ERROR_CHECK(TAG,i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ25703A_TIMOUT_MS)));
 	i2c_cmd_link_delete(packet);
     
 	return data_out;

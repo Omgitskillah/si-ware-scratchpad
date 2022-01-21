@@ -1,4 +1,5 @@
 #include <math.h>
+#include <esp_sleep.h>
 #include "fileSystem_prv.h"
 #include "fileSystem.h"
 #include "sys/errno.h"
@@ -808,6 +809,14 @@ void fileSystem_requestTask(void *parameters) {
                                        sizeof(resp.packet.memResponse.U.mother_board_version));
             ESP_LOGI(TAG, "Reading Mother Board Version %d", resp.packet.memResponse.U.mother_board_version);
             break;
+        case OPID_GET_RESET_GAUGE_COUNT:
+            resp.statusCode = readFile(GAUGE_RESET_COUNT_FILE_NAME, (void *) &resp.packet.memResponse.U.mother_board_version,sizeof(resp.packet.memResponse.U.mother_board_version));
+            ESP_LOGI(TAG, "Reading Gauge Reset  %x", resp.packet.memResponse.U.mother_board_version);
+            break;
+        case OPID_CLEAR_GAUGE_RESET_COUNT:
+            resp.statusCode = remove(GAUGE_RESET_COUNT_FILE_NAME);
+            ESP_LOGI(TAG,"Removing Gauge reset count");
+            break;
         case OPID_SAVE_INACTIVE_TIMEOUT:
             resp.statusCode = writeFile(INACTIVE_TIMEOUT_FILE_NAME, (void *) &rp.U.inactive_timeout,
                                         sizeof(rp.U.inactive_timeout));
@@ -826,14 +835,20 @@ void fileSystem_requestTask(void *parameters) {
         case OPID_GET_BATTERY_LOG:{
             struct stat * file_stats = (struct stat *) BATTERY_LOG_MEMORY;
             stat(BATTERY_LOG_FILE_NAME,file_stats);
-            resp.packet.memResponse.U.battery_log_data.length = file_stats->st_size;
-            resp.statusCode = readFile(BATTERY_LOG_FILE_NAME,BATTERY_LOG_MEMORY,resp.packet.memResponse.U.battery_log_data.length);
-            ESP_LOGI(TAG,"Getting Battery log with size %d",resp.packet.memResponse.U.battery_log_data.length);
+            resp.packet.memResponse.U.battery_log_data.total_length = file_stats->st_size;
+            resp.packet.memResponse.U.battery_log_data.entry_size = fileSystem_gauge_log_entry_size;
+            resp.statusCode = readFile(BATTERY_LOG_FILE_NAME,BATTERY_LOG_MEMORY,resp.packet.memResponse.U.battery_log_data.total_length);
+            ESP_LOGI(TAG,"Getting Battery log with size %d",resp.packet.memResponse.U.battery_log_data.total_length);
             resp.packet.memResponse.U.battery_log_data.data_bytes = BATTERY_LOG_MEMORY;
             resp.packet.memResponse.operationID = OPID_GET_BATTERY_LOG;
-            for (int i = 0; i < resp.packet.memResponse.U.battery_log_data.length; i+=fileSystem_gauge_log_entry_size) {
+            for (int i = 0; i < resp.packet.memResponse.U.battery_log_data.total_length; i+=fileSystem_gauge_log_entry_size) {
                 ESP_LOGI(TAG,"Event type is %d while battery percentage is %d",*((uint32_t*)(resp.packet.memResponse.U.battery_log_data.data_bytes+i)),((GaugeInfo_t*)(resp.packet.memResponse.U.battery_log_data.data_bytes+i +4))->batteryPercentage);
             }
+        }
+            break;
+        case OPID_CLEAR_BATTERY_LOG: {
+            resp.statusCode = remove(BATTERY_LOG_FILE_NAME);
+            ESP_LOGI(TAG, "Removing Battery log");
         }
             break;
         default:
@@ -1022,6 +1037,23 @@ bool fileSystem_is_gauge_golden_file_burnt() {
         fclose(golden_file_ptr);
     }
     return retVal;
+}
+void fileSystem_register_gauge_reset(){
+    uint32_t data = 0;
+    readFile(GAUGE_RESET_COUNT_FILE_NAME,&data,sizeof(data));
+    uint8_t * data_ptr = (uint8_t *) &data;
+    data_ptr[0] += 1;   //only the first byte is used as the reset count
+    writeFile(GAUGE_RESET_COUNT_FILE_NAME,&data,sizeof(data));
+}
+void fileSystem_save_reset_and_wakeup_reason(esp_reset_reason_t reset_reason,esp_sleep_wakeup_cause_t wakeup_reason){
+    uint32_t data = 0;
+    readFile(GAUGE_RESET_COUNT_FILE_NAME, &data, sizeof(data));
+    uint8_t * data_ptr = (uint8_t *) &data;
+    data_ptr[1] = reset_reason; //2nd byte as the reset reason
+    data_ptr[2] = wakeup_reason;    //3rd byte used as the wakeup reason
+    data_ptr[3] = 0;
+    writeFile(GAUGE_RESET_COUNT_FILE_NAME, &data, sizeof(data));
+
 }
 
 void fileSystem_register_golden_file_burnt() {

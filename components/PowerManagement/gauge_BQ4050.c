@@ -1,160 +1,127 @@
 #include "driver/i2c.h"
-
 #include "gauge_BQ4050.h"
+#define TAG "PowerGauge"
 
-
-/* Local defines */
-// debug
-#define TAG                     "PowerGauge"
-// bq4050
+/* Local Defines */
 #define BQ4050_SENSOR_ADDR      0x16
-#define MAC_BLOCK_COMMAND       0x44
-#define GOLDEN_FILE_SIZE        8192
-#define FLASH_BLOCK_SIZE        32
-#define NUM_FLASH_WRITES        GOLDEN_FILE_SIZE / FLASH_BLOCK_SIZE
-#define MAX_WRITE_RETRIES       100
 
-typedef enum {
-    MAC_DEVICETYPE = 0x0001,                        // Read only
-    MAC_FIRMWAREVERSION = 0x0002,                   // Read only
-    MAC_HARDWAREVERSION = 0x0003,                   // Read only
-    MAC_IFCHECKSUM = 0x0004,                        // Read only
-    MAC_STATICDFSIGNATURE = 0x0005,                 // Read only
-    MAC_AIIDFSIGNATURE = 0x0009,                    // Read only
-    MAC_SHUTDOWNMODE = 0x0010,                      // Write only
-    MAC_SLEEPMODE = 0x0011,                         // Write only
-    MAC_FUSETOGGLE = 0x001D,                        // Write only
-    MAC_PRECHARGEFET = 0x001E,                      // Write only
-    MAC_CHARGEFET = 0x001F,                         // Write only
-    MAC_DISCHARGEFET = 0x0020,                      // Write only
-    MAC_FETCONTROL = 0x0022,                        // Write only
-    MAC_LIFETIMEDATACOLLECTION = 0x0023,            // Write only
-    MAC_PERMANENTFAILURE = 0x0024,                  // Write only
-    MAC_BLACKBOXRECORDERRESET = 0x002A,             // Write only
-    MAC_CALIBRATIONMODE = 0x002D,                   // Write only
-    MAC_SEALDEVICE = 0x0030,                        // Write only
-    MAC_SECURITYKEYS = 0x0035,                      // R/W
-    MAC_AUTHENTICATIONKEY = 0x0037,                 // R/W
-    MAC_DEVICERESET = 0x0041,                       // Write only
-    MAC_SAFETYALERT = 0x0050,                       // Read only
-    MAC_SAFETYSTATUS = 0x0051,                      // Read only
-    MAC_PFALERT = 0x0052,                           // Read only
-    MAC_PFSTATUS = 0x0053,                          // Read only
-    MAC_OPERATIONSTATUS = 0x0054,                   // Read only
-    MAC_CHARGINGSTATUS = 0x0055,                    // Read only
-    MAC_GAUGINGSTATUS = 0x0056,                     // Read only
-    MAC_MANUFACTURINGSTATUS = 0x0057,               // Read only
-    MAC_AFEREGISTER = 0x0058,                       // Read only
-    MAC_LIFETIMEDATABLOCK1 = 0x0060,                // Read only
-    MAC_LIFETIMEDATABLOCK2 = 0x0061,                // Read only
-    MAC_LIFETIMEDATABLOCK3 = 0x0062,                // Read only
-    MAC_LIFETIMEDATABLOCK4 = 0x0063,                // Read only
-    MAC_LIFETIMEDATABLOCK5 = 0x0064,                // Read only
-    MAC_MANUFACTURERINFO = 0x0070,                  // Read only
-    MAC_DASTATUS1 = 0x0071,                         // Read only
-    MAC_DASTATUS2 = 0x0072,                         // Read only
-    MAC_MANUFACTURERINFO2 = 0x007A,                 // Read only
-    MAC_ROMMODE = 0x0F00,                           // Write only
-    MAC_EXITCALIBRATIONOUTPUT = 0xF080,             // R/W
-    MAC_OUTPUTCCANDADCFORCALIBRATION = 0xF081,      // R/W
-    MAC_OUTPUTSHORTEDCCANDADCFORCALIBR = 0xF082,    // R/W
-} MACCommand_t;
-
-
+/* Local variables */
+static GaugeWriteCommand_t init_command_set[] = 
+{
+    {.U.data = 0x01,   .address = Flash_DAconfig,           .size = 1, .successfully_written = 0},   //Enable 2 cells
+    {.U.data = 0x0038, .address = Flash_MfgInit,            .size = 2, .successfully_written = 0},   //FET_EN = 1, GUAGE_EN = 1
+    {.U.data = 0xFF,   .address = Flash_ProtectionA,        .size = 1, .successfully_written = 0},   //Enabled Protections A
+    {.U.data = 0x3F,   .address = Flash_ProtectionB,        .size = 1, .successfully_written = 0},   //Enabled Protections B
+    {.U.data = 0xD5,   .address = Flash_ProtectionC,        .size = 1, .successfully_written = 0},   //Enabled Protections C
+    {.U.data = 0x0F,   .address = Flash_ProtectionD,        .size = 1, .successfully_written = 0},   //Enabled Protections D
+    {.U.data = 0x0320, .address = Flash_LowTempCurrentLow,  .size = 2, .successfully_written = 0},   //LowTempCurrentLow = 800 mA
+    {.U.data = 0x0320, .address = Flash_LowTempCurrentMed,  .size = 2, .successfully_written = 0},   //LowTempCurrentMed = 800 mA
+    {.U.data = 0x0320, .address = Flash_LowTempCurrentHigh, .size = 2, .successfully_written = 0},   //LowTempCurrentHigh = 800 mA
+    {.U.data = 0x06,   .address = Flash_TempEn,             .size = 1, .successfully_written = 0},   //Enable temperature
+    {.U.data = 0x09F6, .address = Flash_CUVThreshold,       .size = 2, .successfully_written = 0},   //CUVThreshold = 2550 mV
+    {.U.data = 0x0258, .address = Flash_OCThreshold,        .size = 2, .successfully_written = 0},   //OCThreshold = 600 mAh
+    {.U.data = 0xC0,   .address = Flash_PreChargeCurrent,   .size = 1, .successfully_written = 0},   //PreChargeCurrent = 192 mA
+    {.U.data = 0x0B54, .address = Flash_EDV0add,            .size = 2, .successfully_written = 0},   //EDV0 = 2900 mv
+    {.U.data = 0x0BB8, .address = Flash_EDV1add,            .size = 2, .successfully_written = 0},   //EDV1 = 3000 mv
+    {.U.data = 0x0BD7, .address = Flash_EDV2add,            .size = 2, .successfully_written = 0},   //EDV2 = 3031 mv
+    {.U.data = 0x1102, .address = Flash_CEDVGaugeConfig,    .size = 2, .successfully_written = 0},   //CEDV Gauging Configuration : SME0 = 1, FCC_LIMIT = 1
+    {.U.data = 0xD,    .address = Flash_CEDVsmoothConfig,   .size = 1, .successfully_written = 0},   //CEDVsmoothConfig : SMEN = 1, SMEXT = 1, SMOOTHEOC_EN = 1
+    {.U.data = 0x41,   .address = Flash_FET_options,        .size = 1, .successfully_written = 0},   //FET Options register
+};
 
 static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size) 
 {
-    /**
-     * @brief SMBus Blosk Write protocol
-     * 1. Create i2c cmd link
-     * 2. Send slave Address with write bit set, ack
-     * 3. Send command code, ack
-     * 4. Send number of bytes that will follow, ack
-     * 5. send byte sequence each with ack
-     * 6. stop
-     * 7. destroy command link
-     * @param | 
-     */
-
+    // this could be clean up using a statem machine
     esp_err_t err = ESP_OK;
+
+    if( ( NULL == data_in) && ( 0 != size) )
+    {
+        ESP_LOGW(TAG, "Invalid use of gauge_MACWrite()");
+    }
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
 
-    ERROR_CHECK(TAG, err |= i2c_master_start(packet));
-
-    // Send slave Address with write bit set, ack
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_WRITE, true));
-
-    // Send command code, ack
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
-
-    // Send number of bytes that will follow, ack
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, size + 2, true)); //
-
-    // send data, LSB first
-
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, *((uint8_t *) &command + 0), true)); // unsafe operation, memory may not be in little endian
-    ERROR_CHECK(TAG, err |= i2c_master_write_byte(packet, *((uint8_t *) &command + 1), true)); // unsafe operation, memory may not be in little endian. 
-    
-    if (data_in != NULL) 
+    if( NULL != packet )
     {
-        // expect data to be sent in a loop with ACKs or call i2c_master_cmd_begin() after
-        // check for null should be done prior to setting up the SMBus block write.
-        // if data_in is null despite size > 0, then the chip will remain in a state of waiting for more bytes that will never come
-        ERROR_CHECK(TAG, err |= i2c_master_write(packet, data_in, size, true)); 
+        err = i2c_master_start(packet);
+
+        if( ESP_OK != err )
+        {
+            // exit I2C if not successfully started
+            ESP_LOGW(TAG, "Error %u, failed to start I2C", err);
+        }
+        else
+        {
+            uint8_t write_address = BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE;
+            uint8_t command_byte_count = sizeof(command); // this will always be 2
+            uint8_t total_byte_count = size + command_byte_count;
+            // send write address 
+            ERROR_CHECK( TAG, i2c_master_write_byte( packet, write_address, true) );
+            // send MAC address
+            ERROR_CHECK( TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true) );
+            // send number of bites to write to the mac
+            ERROR_CHECK( TAG, i2c_master_write_byte(packet, total_byte_count, true) );
+            // send command
+            ERROR_CHECK( TAG, i2c_master_write_byte(packet, (uint8_t)command, true) );
+            ERROR_CHECK( TAG, i2c_master_write_byte(packet, (uint8_t)(command >> 8), true) );
+            // send data
+            for( uint8_t i = 0; i < size; i++ )
+            {
+                ERROR_CHECK( TAG, i2c_master_write_byte(packet, data_in[i], true) );
+            }
+
+            err = i2c_master_stop( packet );
+            if( ESP_OK != err )
+            {
+                // could not send stop
+                ESP_LOGW(TAG, "Error %u, failed to stop I2C", err);
+            }
+            else
+            {
+                // empty the queue
+                err = i2c_master_cmd_begin( PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS) );
+                if( ESP_OK != err )
+                {
+                    // could not send 
+                    ESP_LOGW(TAG, "Error %u, i2c_master_cmd_begin, cmd LSB: %02x, cmd MSB: %02x, size: %u", err, (uint8_t)command, (uint8_t)(command >> 8), size );
+                }
+            }
+        }
+        
+        // delete the I2C instance
+        i2c_cmd_link_delete(packet);
     }
-    
-    ERROR_CHECK(TAG, err |= i2c_master_stop(packet));
-    
-    if (ESP_OK != err) 
-    {
-        //if this happens, we will exit without cleaning up the link instance.
-        ESP_LOGW(TAG, "Error %u before I2C Command Begin", err);
-        return err;
-    }
-    
-    // flushing the data after sending the i2c stop
-    ERROR_CHECK(TAG, err = i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(10000)));
-    
-    if (ESP_OK != err) 
-    {
-        ESP_LOGE(TAG, "Error @ I2C address %x", command);
-    }
-    
-    i2c_cmd_link_delete(packet);
-    
+
     return err;
 }
 
 static esp_err_t gauge_writeCommands(GaugeWriteCommand_t *commands, int num_commands, bool use_data_ptr) {
     uint8_t unable_to_write_ctr = 0;
-//    uint16_t able_to_write_ctr;
     uint8_t trial_ctr = 0;
-    do {
+
+    do 
+    {
         unable_to_write_ctr = 0;
-//        able_to_write_ctr = 0;
-        for (int i = 0; i < num_commands; ++i) {
-            if (!commands[i].successfully_written) {
+        for (int i = 0; i < num_commands; ++i) 
+        {
+            if (!commands[i].successfully_written) 
+            {
                 uint8_t *data_to_send = (use_data_ptr ? commands[i].U.data_ptr : (uint8_t *) &commands[i].U.data);
-//                ESP_LOGI(TAG,"About To write Command %x, with size %d, and first byte is %x and it's %d yet written",commands[i].address,commands[i].size,
-//                data_to_send == NULL ? 0x00:data_to_send[0],commands[i].successfully_written);
-                commands[i].successfully_written = (ESP_OK == gauge_MACWrite(commands[i].address, data_to_send,
-                                                                             commands[i].size));
+                commands[i].successfully_written = (ESP_OK == gauge_MACWrite(commands[i].address, data_to_send, commands[i].size));
                 unable_to_write_ctr += !commands[i].successfully_written;
-//                able_to_write_ctr += commands[i].successfully_written;
-//                ESP_LOGI(TAG, "Remaining Items to write is %d, Written Items is %d", unable_to_write_ctr,able_to_write_ctr);
-            } else {
-//                ESP_LOGI(TAG,"Already Written this block");
             }
         }
-//        ESP_LOGI(TAG, "Remaining Items to write is %d, Written Items is %d", unable_to_write_ctr,able_to_write_ctr);
+    } 
+    while ((unable_to_write_ctr != 0) && (++trial_ctr < MAX_WRITE_RETRIES));
 
-    } while ((unable_to_write_ctr != 0) && (++trial_ctr < MAX_WRITE_RETRIES));
-    if (trial_ctr >= MAX_WRITE_RETRIES) {
+    if (trial_ctr >= MAX_WRITE_RETRIES) 
+    {
         ESP_LOGW(TAG, "Failed after %d Trials", MAX_WRITE_RETRIES);
         return ESP_FAIL;
-    } else {
-        ESP_LOGI(TAG, "Finished Writing Successfully");
+    } 
+    else 
+    {
+        ESP_LOGI(TAG, "Finished Writing Successfully. Failures happened %d times.", trial_ctr);
         return ESP_OK;
     }
 }
@@ -166,13 +133,13 @@ static uint8_t gauge_MACRead(uint16_t command, uint8_t *data_out) {
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, &len, I2C_MASTER_ACK));
-
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, 10000 / portTICK_RATE_MS));
+    vTaskDelay(pdMS_TO_TICKS(20));
+    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
     i2c_cmd_link_delete(packet);
     if(len == 0){
         return 0;
@@ -187,8 +154,8 @@ static uint8_t gauge_MACRead(uint16_t command, uint8_t *data_out) {
 
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, &data_out[len - 3], I2C_MASTER_NACK));
     ERROR_CHECK(TAG, i2c_master_stop(packet));
-
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, 10000 / portTICK_RATE_MS));
+    vTaskDelay(pdMS_TO_TICKS(20));
+    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
     i2c_cmd_link_delete(packet);
     return len -2;
 }
@@ -201,13 +168,13 @@ static void gauge_flashRead(uint16_t starting_address, uint8_t *data_out,uint8_t
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, &len, I2C_MASTER_ACK));
-
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, 10000 / portTICK_RATE_MS));
+    vTaskDelay(pdMS_TO_TICKS(20));
+    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
     i2c_cmd_link_delete(packet);
 //    ESP_LOGI(TAG,"Flash Read Length = %d",len); //should be 34
     packet = i2c_cmd_link_create();
@@ -226,8 +193,8 @@ static void gauge_flashRead(uint16_t starting_address, uint8_t *data_out,uint8_t
     //last byte should be read with NACK
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, &dummy, I2C_MASTER_NACK));
     ERROR_CHECK(TAG, i2c_master_stop(packet));
-
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, 10000 / portTICK_RATE_MS));
+    vTaskDelay(pdMS_TO_TICKS(20));
+    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
     i2c_cmd_link_delete(packet);
 }
 
@@ -236,16 +203,17 @@ static uint16_t gauge_readWord(uint8_t command) {
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, command, true));
 
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 0), I2C_MASTER_ACK));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 1), I2C_MASTER_NACK));
     ERROR_CHECK(TAG, i2c_master_stop(packet));
 
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, 10000 / portTICK_RATE_MS));
+    vTaskDelay(pdMS_TO_TICKS(20));
+    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
     i2c_cmd_link_delete(packet);
 
     return data_out;
@@ -264,6 +232,14 @@ void gauge_readBatteryInfo(GaugeInfo_t *gaugeInfo) {
 //    gaugeInfo->batteryPercentage = (uint8_t) lround(fmin(fmax((gaugeInfo->fullCapacity != 0) ? (uint8_t) (gaugeInfo->capacity * 100.0 /fmax(gaugeInfo->fullCapacity,BATTERY_FULL_CAPACITY)) : 0, 0),100));
     gaugeInfo->batteryPercentage = gauge_readWord(SBS_RELATIVESTATEOFCHARGE);
     ESP_LOGI(TAG,"Relative State of charge is %d",gaugeInfo->batteryPercentage);
+
+    //convert 100<->25 % on the original scale to 100<->0 % on the new reported scale
+    int newCap = round((gaugeInfo->batteryPercentage - 25) * 100.0 / 75.0);
+    if(newCap < 0)
+        gaugeInfo->batteryPercentage = 0;
+    else
+        gaugeInfo->batteryPercentage = newCap;
+
     uint16_t temp = gauge_readWord(SBS_CURRENT);
     gaugeInfo->current = *((int16_t *) &temp);    //convert unsigned value to signed value
 
@@ -284,12 +260,14 @@ void gauge_readBatteryInfo(GaugeInfo_t *gaugeInfo) {
     gauge_MACRead(MAC_PFSTATUS, (uint8_t *) &gaugeInfo->pfStatus);
     gauge_MACRead(MAC_GAUGINGSTATUS, (uint8_t *) &gaugeInfo->gaugingStatus);
     gauge_MACRead(MAC_MANUFACTURINGSTATUS, (uint8_t *) &gaugeInfo->mfgStatus);
+    gauge_MACRead(MAC_SAFETYALERT,(uint8_t*)&gaugeInfo->safetyAlert);
     gauge_flashRead(Flash_Cycle_Count,(uint8_t*)&gaugeInfo->cycleCount,2);
 //    ESP_LOGI(TAG,"Data Flash Cycle count %d",gaugeInfo->cycleCount);
 }
 void gauge_read_life_time_data(life_time_data_t* life_time_data){
     uint8_t *data_ptr = (uint8_t*)life_time_data;
     ESP_LOGI(TAG,"lifeTimeData size is %d",sizeof(life_time_data_t));
+    gauge_MACRead(MAC_LIFETIMEDATABLOCK1,data_ptr);
     for (int i = 0,data_idx = 0; i < 5; ++i) {
         data_idx += gauge_MACRead(MAC_LIFETIMEDATABLOCK1 + i,&data_ptr[data_idx]);
         ESP_LOGI(TAG,"Read %d bytes",data_idx);
@@ -392,6 +370,7 @@ void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo) {
     ESP_LOGI(TAG, "xchg = %d", gaugeInfo->xchg);
     ESP_LOGI(TAG, "xdischg = %d", gaugeInfo->xdischg);
     ESP_LOGI(TAG, "safetyStatus = 0x%0X", gaugeInfo->safetyStatus);
+    ESP_LOGI(TAG, "safetyAlert = 0x%0X", gaugeInfo->safetyAlert);
     ESP_LOGI(TAG, "pfStatus = 0x%0X", gaugeInfo->pfStatus);
     ESP_LOGI(TAG, "gaugingStatus = 0x%0X", gaugeInfo->gaugingStatus);
     ESP_LOGI(TAG, "mfgStatus = 0x%0X", gaugeInfo->mfgStatus);
@@ -401,102 +380,60 @@ void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo) {
 }
 
 void gauge_deviceReset() {
-//    gauge_MACWrite(MAC_DEVICERESET, NULL, 0);
-    GaugeWriteCommand_t writeCommand = {.address = MAC_DEVICERESET, .U.data_ptr = NULL, .size = 0, .successfully_written = 0};
-    ESP_LOGI(TAG, "Starting Gauge Reset");
-    gauge_writeCommands(&writeCommand, 1, 1);
+    if( ESP_OK == gauge_MACWrite( MAC_DEVICERESET, NULL, 0 ) )
+    {
+        ESP_LOGI(TAG, "RESET GAUGE SUCCESS");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "RESET GAUGE FAILED");
+    }
     vTaskDelay(1000 / portTICK_RATE_MS);
 }
 
 void gauge_disable() {
-    ESP_LOGI(TAG, "Starting Gauge Disable");
-//    uint32_t data = 0x0005;
-//    gauge_MACWrite(Flash_MfgInit, (uint8_t *) &data, 2); //disable gauge
-    GaugeWriteCommand_t writeCommand = {.address = Flash_MfgInit, .U.data = 0x0000, .size = 2, .successfully_written = 0}; //disable gauge
-    ESP_ERROR_CHECK(gauge_writeCommands(&writeCommand,1,false));
-//    data = 0x05;
-//    gauge_MACRead(Flash_MfgInit, (uint8_t *) &data);
-//    ESP_LOGI(TAG, "MFG_Init Register data is %d", data);
-}
-
-void gauge_init() {
-    GaugeWriteCommand_t writeCommands[] = {
-            {.U.data = 0x01, .address = Flash_DAconfig, .size = 1, .successfully_written = 0},   //Enable 2 cells
-            {.U.data = 0x0038, .address = Flash_MfgInit, .size = 2, .successfully_written = 0},   //FET_EN = 1, GUAGE_EN = 1
-            {.U.data = 0xFF, .address = Flash_ProtectionA, .size = 1, .successfully_written = 0},   //Enabled Protections A
-            {.U.data = 0x3F, .address = Flash_ProtectionB, .size = 1, .successfully_written = 0},   //Enabled Protections B
-            {.U.data = 0xD5, .address = Flash_ProtectionC, .size = 1, .successfully_written = 0},   //Enabled Protections C
-            {.U.data = 0x0F, .address = Flash_ProtectionD, .size = 1, .successfully_written = 0},   //Enabled Protections D
-            {.U.data = 0x0320, .address = Flash_LowTempCurrentLow, .size = 2, .successfully_written = 0},   //LowTempCurrentLow = 800 mA
-            {.U.data = 0x0320, .address = Flash_LowTempCurrentMed, .size = 2, .successfully_written = 0},   //LowTempCurrentMed = 800 mA
-            {.U.data = 0x0320, .address = Flash_LowTempCurrentHigh, .size = 2, .successfully_written = 0},   //LowTempCurrentHigh = 800 mA
-            {.U.data = 0x06, .address = Flash_TempEn, .size = 1, .successfully_written = 0},   //Enable temperature
-            {.U.data = 0x09F6, .address = Flash_CUVThreshold, .size = 2, .successfully_written = 0},   //CUVThreshold = 2550 mV
-            {.U.data = 0x0258, .address = Flash_OCThreshold, .size = 2, .successfully_written = 0},   //OCThreshold = 600 mAh
-            {.U.data = 0xC0, .address = Flash_PreChargeCurrent, .size = 1, .successfully_written = 0},   //PreChargeCurrent = 192 mA
-            {.U.data = 0x0B54, .address = Flash_EDV0add, .size = 2, .successfully_written = 0},   //EDV0 = 2900 mv
-            {.U.data = 0x0BB8, .address = Flash_EDV1add, .size = 2, .successfully_written = 0},   //EDV1 = 3000 mv
-            {.U.data = 0x0BD7, .address = Flash_EDV2add, .size = 2, .successfully_written = 0},   //EDV2 = 3031 mv
-            {.U.data = 0x1102, .address = Flash_CEDVGaugeConfig, .size = 2, .successfully_written = 0},   //CEDV Gauging Configuration : SME0 = 1, FCC_LIMIT = 1
-            {.U.data = 0xD, .address = Flash_CEDVsmoothConfig, .size = 1, .successfully_written = 0},   //CEDVsmoothConfig : SMEN = 1, SMEXT = 1, SMOOTHEOC_EN = 1
-            {.U.data = 0x41, .address = Flash_FET_options, .size = 1, .successfully_written = 0},   //FET Options register
-    };
-    uint8_t num_operations = sizeof(writeCommands) / sizeof(writeCommands[0]);
-    ESP_LOGI(TAG, "Starting Gauge Init");
-    ESP_ERROR_CHECK(gauge_writeCommands(writeCommands, num_operations, 0));
-//    uint8_t unable_to_write_ctr = 0;
-//    do {
-//        unable_to_write_ctr = 0;
-//        for (int i = 0; i < num_operations; ++i) {
-//            if (!writeCommands[i].successfully_written) {
-//                writeCommands[i].successfully_written = (ESP_OK == gauge_MACWrite(writeCommands[i].address,(uint8_t *) &writeCommands[i].data,writeCommands[i].size));
-//                unable_to_write_ctr += !writeCommands[i].successfully_written;
-//            }
-//        }
-//        ESP_LOGI(TAG,"Remaining Items to write for gauge_init is %d",unable_to_write_ctr);
-//    } while (unable_to_write_ctr != 0);
-
-//    uint16_t data = 0x01;
-//    gauge_MACWrite(Flash_DAconfig, (uint8_t *) &data, 1); //Enable 2 cells
-//
-//    data = 0x0018;
-//    gauge_MACWrite(Flash_MfgInit, (uint8_t *) &data, 2); //FET_EN = 1, GUAGE_EN = 1
-//
-//    data = 0xFF;
-//    gauge_MACWrite(Flash_ProtectionA, (uint8_t *) &data, 1); //Enabled Protections A
-//
-//    data = 0x3F;
-//    gauge_MACWrite(Flash_ProtectionB, (uint8_t *) &data, 1); //Enabled Protections B
-//
-//    data = 0xD5;
-//    gauge_MACWrite(Flash_ProtectionC, (uint8_t *) &data, 1); //Enabled Protections C
-//
-//    data = 0x0F;
-//    gauge_MACWrite(Flash_ProtectionD, (uint8_t *) &data, 1); //Enabled Protections D
-//
-//    data = 0x06;
-//    gauge_MACWrite(Flash_TempEn, (uint8_t *) &data, 1); //Enable temperature
-//
-//    data = 0x09F6;
-//    gauge_MACWrite(Flash_CUVThreshold, (uint8_t *) &data, 2); //CUVThreshold = 2550 mV
-//
-//    data = 0xC0;
-//    gauge_MACWrite(Flash_PreChargeCurrent, (uint8_t *) &data, 1); //PreChargeCurrent = 192 mA
-//
-//    data = 0x1100;
-//    gauge_MACWrite(Flash_CEDVGaugeConfig, (uint8_t *) &data,
-//                   2);    //CEDV Gauging Configuration : SME0 = 1, FCC_LIMIT = 1
-//
-//    data = 0xD;
-//    gauge_MACWrite(Flash_CEDVsmoothConfig, (uint8_t *) &data,
-//                   1);  //CEDVsmoothConfig : SMEN = 1, SMEXT = 1, SMOOTHEOC_EN = 1
-//    data = 0x41;
-//    gauge_MACWrite(Flash_FET_options, (uint8_t *) &data, 1); //FET Options register
+    uint8_t data[] = { 0x00, 0x00 };
+    if( ESP_OK == gauge_MACWrite( Flash_MfgInit, data, sizeof(data) ) )
+    {
+        ESP_LOGI(TAG, "DISABLE GAUGE SUCCESS");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "DISABLE GAUGE FAILED");
+    }
 }
 
 void gauge_enable(){
-    GaugeWriteCommand_t enable_command = {.U.data = 0x0018, .address = Flash_MfgInit, .size = 2, .successfully_written = 0};   //FET_EN = 1, GUAGE_EN = 1
-    ESP_ERROR_CHECK(gauge_writeCommands(&enable_command,1,false));
+    uint8_t data[] = { 0x18, 0x00 };
+    if( ESP_OK == gauge_MACWrite( Flash_MfgInit, data, sizeof(data) ) )
+    {
+        ESP_LOGI(TAG, "ENABLE GAUGE SUCCESS");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "ENABLE GAUGE FAILED");
+    }
+}
+
+void gauge_init() {
+
+    uint8_t num_operations = sizeof(init_command_set) / sizeof(init_command_set[0]);
+
+    uint8_t i = 0;
+    uint8_t local_data_buffer[2];
+
+    while( i < num_operations )
+    {
+        uint16_t current_cmd = init_command_set[i].address;
+        uint16_t current_cmd_size = init_command_set[i].size;
+        local_data_buffer[0] = init_command_set[i].U.data;
+        local_data_buffer[1] = init_command_set[i].U.data >> 8;
+
+        if( ESP_OK != gauge_MACWrite( current_cmd, local_data_buffer, current_cmd_size ) )
+        {
+            ESP_LOGI(TAG, "failed to write cmd: %04x, size: %u", current_cmd, current_cmd_size );
+        }
+    }
 }
 
 void gauge_writeGoldenFile(uint8_t *goldenFile) {
@@ -505,11 +442,15 @@ void gauge_writeGoldenFile(uint8_t *goldenFile) {
      * That means we need 8192/32 = 256 write commands, instead of allocating 256 * 8 bytes we can use the memory just next to the golden file
      * since it's 64k and we need only the first 8k, so there is enough memory
      */
-//    bool is_sector_written[NUM_FLASH_WRITES] = {0};
-//    uint8_t unable_to_write_ctr = 0;
+
+    // I think this can only be done using the BQ studio which understands the length of each register in the data flash. 
+    // using FW, we have to respect endianness and data size while writing to the data flash
+    
     ESP_LOGI(TAG, "Starting to write Golden File");
     GaugeWriteCommand_t *writeCommands = (GaugeWriteCommand_t *) &goldenFile[GOLDEN_FILE_SIZE];
-    for (int i = 0; i < NUM_FLASH_WRITES; ++i) {
+    
+    for (int i = 0; i < NUM_FLASH_WRITES; ++i) 
+    {
         uint16_t offset = i * FLASH_BLOCK_SIZE;
         writeCommands[i].address = Flash_Data_Access + offset;
         writeCommands[i].U.data_ptr = &goldenFile[offset];
@@ -518,20 +459,6 @@ void gauge_writeGoldenFile(uint8_t *goldenFile) {
         ESP_LOGI(TAG, "Perparing Golden file commands, address %x, first byte %x, size %d", writeCommands[i].address,
                  writeCommands[i].U.data_ptr[0], writeCommands[i].size);
     }
+
     ESP_ERROR_CHECK(gauge_writeCommands(writeCommands, NUM_FLASH_WRITES, 1));
-//
-//    do {
-//        unable_to_write_ctr = 0;
-//        for (int i = 0; i < NUM_FLASH_WRITES; ++i) {
-//            int offset = i * FLASH_BLOCK_SIZE;
-//
-//            if (!is_sector_written[i]) {
-//                is_sector_written[i] = (ESP_OK == gauge_MACWrite(Flash_Data_Access + offset, &goldenFile[offset],
-//                                                                 FLASH_BLOCK_SIZE));
-//                unable_to_write_ctr += is_sector_written[i] == 0 ? 1 : 0;
-//            }
-//        }
-//        ESP_LOGI(TAG, "Golden File write Ctr for this iteration is %d", unable_to_write_ctr);
-//
-//    } while (unable_to_write_ctr != 0);
 }

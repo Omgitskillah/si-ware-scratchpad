@@ -13,9 +13,8 @@
 
 #include "centralManagerDefs.h"
 
-#define FW_VERSION    2201010208
+#define FW_VERSION    2201200211
 #define BATTERY_FULL_CAPACITY 3350
-#define MOTHER_BOARD_VERSION_G    7
 
 #define SHARED_MEMORY_SIZE     (64 * 1024 + 100)
 #define ERROR_STRING_SIZE       1024
@@ -45,6 +44,7 @@
 #define BLUETOOTH_TIMER_PERIOD          (3* 60000 / portTICK_PERIOD_MS) //60  seconds
 #define PERIODIC_CHECK_PERIOD           (5*60*1000)
 #define INACTIVE_TIMER_DEFAULT_PERIOD          15    //15 minutes
+#define INACTIVE_TIMER_DISABLE          (-1)
 
 
 #define BATTERY_THRESHOLD_SHUT_DOWN		1
@@ -107,5 +107,5 @@ ScannerError_t centralManager_check_battery_level(uint8_t requires_scan);
 
 esp_err_t centralManager_set_inactive_timeout(uint32_t inactive_timeout);
 void centralManager_set_scan_temperature_window(uint8_t temperature_window);
-
+uint32_t centralManager_get_mother_board_version();
 #endif

@@ -158,10 +158,11 @@ void CL_systemServiceTx(ResponsePacket_t *respPacket, CLSendHandler_t sendHandle
             uint16_t life_time_data_length = resp->U.life_time_data_packet.life_time_data_length;
             clPreamble.U.preamble.length = sizeof(resp->operationID) + sizeof(life_time_data_t);
             clCoreData.U.core.numOfPackets = ceil(clPreamble.U.preamble.length * 1.0 / sizeof(CLData_t));
+//            ESP_LOGI(TAG,"Life Time Data numPackets is %d",clCoreData.U.core.numOfPackets);
             memcpy(((uint8_t *) &firstPacket), &resp->operationID, sizeof(resp->operationID)); //copy operationID
             memcpy(((uint8_t *) &firstPacket) + sizeof(resp->operationID), &life_time_data_length,sizeof(life_time_data_length));
             memcpy(((uint8_t *) &firstPacket) + sizeof(resp->operationID) + sizeof(life_time_data_length), (const void *)resp->U.life_time_data_packet.life_time_data_ptr,sizeof(CLData_t) - sizeof(resp->operationID) - sizeof(life_time_data_length));
-            clCoreData.U.core.dataPTR = (CLData_t *) ((uint8_t *) resp->U.life_time_data_packet.life_time_data_ptr + sizeof(CLData_t) - sizeof(resp->operationID) - sizeof(life_time_data_length));
+            clCoreData.U.core.dataPTR = (CLData_t *) (((uint8_t *) resp->U.life_time_data_packet.life_time_data_ptr) + sizeof(CLData_t) - sizeof(resp->operationID) - sizeof(life_time_data_length));
         }
             break;
         case OPID_VERSION_REQ:
@@ -198,8 +199,12 @@ void CL_systemServiceTx(ResponsePacket_t *respPacket, CLSendHandler_t sendHandle
             clCoreData.U.core.dataPTR = (CLData_t *) resp;
             clCoreData.U.core.numOfPackets = 0;
             break;
+        case OPID_SAFETY_STATUS_REQ:
+            clPreamble.U.preamble.failure_reason = resp->U.safety_status_errors;    //just put the failure reason in the preamble.
+            //if nothing failed fall through as you have no meaningful data to send. this will send the operation ID only
         case OPID_CHECK_BOARD:
         case OPID_ENTER_DEBUG_MODE:
+        case OPID_INIT_AND_RESET_GAUGE:
             clPreamble.U.preamble.length = 4;
             clCoreData.U.core.dataPTR = (CLData_t *) resp;
             clCoreData.U.core.numOfPackets = 0;
@@ -216,6 +221,7 @@ void CL_systemServiceTx(ResponsePacket_t *respPacket, CLSendHandler_t sendHandle
     }
 
     ESP_LOGI(TAG, "First Data byte %d", *((uint8_t *) clCoreData.U.core.dataPTR));
+//    ESP_LOGI(TAG,"Started Sending Response with opID %x",resp->operationID);
 
     if (clCoreData.U.core.numOfPackets == 0) {
         sendHandler(parameters, (uint8_t *) clCoreData.U.core.dataPTR, clPreamble.U.preamble.length);
@@ -223,12 +229,14 @@ void CL_systemServiceTx(ResponsePacket_t *respPacket, CLSendHandler_t sendHandle
 
     } else {
         for (uint16_t i = 0; i < clCoreData.U.core.numOfPackets; i++) {
+//            ESP_LOGI(TAG,"Sending Packet %d",i);
             if (i == 0)
                 sendHandler(parameters, (uint8_t *) &firstPacket, sizeof(CLData_t));
             else
                 sendHandler(parameters, (uint8_t *) &clCoreData.U.core.dataPTR[i - 1], sizeof(CLData_t));
         }
     }
+//    ESP_LOGI(TAG,"Done Sending Response with opID %x",resp->operationID);
 }
 
 void CL_memoryServiceTx(ResponsePacket_t *respPacket, CLSendHandler_t sendHandler, void *parameters) {
@@ -315,18 +323,19 @@ void CL_memoryServiceTx(ResponsePacket_t *respPacket, CLSendHandler_t sendHandle
             clCoreData.U.core.numOfPackets = 0;
             break;
         case OPID_READ_MOTHER_BOARD_VERSION_FILE:
+        case OPID_GET_RESET_GAUGE_COUNT:
             clPreamble.U.preamble.length = sizeof(resp->operationID) + sizeof(resp->U.mother_board_version);
             clCoreData.U.core.dataPTR = (CLData_t *) resp;
             clCoreData.U.core.numOfPackets = 0;
             break;
         case OPID_GET_BATTERY_LOG:
-            clPreamble.U.preamble.length = sizeof(resp->operationID) + sizeof(resp->U.battery_log_data.length) + resp->U.battery_log_data.length;
+            clPreamble.U.preamble.length = sizeof(resp->operationID) + sizeof(resp->U.battery_log_data.total_length) + sizeof(resp->U.battery_log_data.entry_size) + resp->U.battery_log_data.total_length;
             clCoreData.U.core.numOfPackets =  ceil(clPreamble.U.preamble.length * 1.0 / sizeof(CLData_t));
             memcpy((uint8_t *) (&firstPacket), &resp->operationID, sizeof(resp->operationID));
-            memcpy((uint8_t *) (&firstPacket) + sizeof(resp->operationID), &resp->U.battery_log_data.length,sizeof(resp->U.battery_log_data.length));
-            memcpy((uint8_t *) (&firstPacket) + sizeof(resp->operationID) + sizeof(resp->U.battery_log_data.length), resp->U.battery_log_data.data_bytes,sizeof(CLData_t) -sizeof(resp->operationID) - sizeof(resp->U.battery_log_data.length));
-
-            clCoreData.U.core.dataPTR = (CLData_t * )(resp->U.battery_log_data.data_bytes +sizeof(CLData_t) -sizeof(resp->operationID) - sizeof(resp->U.battery_log_data.length));
+            memcpy((uint8_t *) (&firstPacket) + sizeof(resp->operationID), &resp->U.battery_log_data.total_length,sizeof(resp->U.battery_log_data.total_length));
+            memcpy((uint8_t *) (&firstPacket) + sizeof(resp->operationID)+ sizeof(resp->U.battery_log_data.total_length), &resp->U.battery_log_data.entry_size,sizeof(resp->U.battery_log_data.entry_size));
+            memcpy((uint8_t *) (&firstPacket) + sizeof(resp->operationID) + sizeof(resp->U.battery_log_data.total_length) +sizeof(resp->U.battery_log_data.entry_size) , resp->U.battery_log_data.data_bytes,sizeof(CLData_t) -sizeof(resp->operationID) - sizeof(resp->U.battery_log_data.total_length) - sizeof(resp->U.battery_log_data.entry_size));
+            clCoreData.U.core.dataPTR = (CLData_t * )(resp->U.battery_log_data.data_bytes +sizeof(CLData_t) -sizeof(resp->operationID) - sizeof(resp->U.battery_log_data.total_length) - sizeof(resp->U.battery_log_data.entry_size));
             break;
         default:
             clPreamble.U.preamble.length = 1;

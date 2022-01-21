@@ -205,6 +205,7 @@ ScannerError_t readDataReady(uint32_t timeout_ms) {
     while ((xTaskGetTickCount() - tasktime_Start) < ((MINIMUM_TIMEOUT_MS + timeout_ms) / portTICK_RATE_MS)) {
         if (gpio_get_level((gpio_num_t) IO_NS_DRDY)) {
             ScannerError_t statusCode;
+            NS_DEFAULT_SPI_RX[0] = 0;
             NS_sendSpi("187, 0", NS_DEFAULT_SPI_RX);            // read statusCode
             statusCode = NS_DEFAULT_SPI_RX[0];
             ESP_LOGI(TAG,"Status Code %u",statusCode);
@@ -212,7 +213,6 @@ ScannerError_t readDataReady(uint32_t timeout_ms) {
         }
         vTaskDelay(100 / portTICK_RATE_MS); //delay 100 ms to release the task
     }
-
     return NS_DATA_READY_TIMEOUT;
 }
 
@@ -301,6 +301,9 @@ ScannerError_t runPSD(P3RequestPacket_t *rp, P3Response_t *resp) {
     NS_sendSpi("150, 0, 0", NS_DEFAULT_SPI_RX);//psd length
     memcpy(&resp->data.spectralData.psdLength, NS_DEFAULT_SPI_RX, sizeof(resp->data.spectralData.psdLength));
     ESP_LOGI(TAG, "PSD length = %d", resp->data.spectralData.psdLength);
+    if(resp->data.spectralData.psdLength == 0){
+        return NS_PSD_LENGTH_INVALID;
+    }
 
     streamSpectralData(resp);
     postSpectralProcessing(resp);

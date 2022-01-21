@@ -28,7 +28,8 @@ typedef struct {
             uint8_t  status;
             uint16_t length;
             uint32_t operation_Id;
-            uint8_t  dummies[13];
+            uint64_t failure_reason;
+            uint8_t  dummies[5];
         } __attribute__((packed)) preamble;
 
         struct {

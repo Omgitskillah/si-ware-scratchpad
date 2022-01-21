@@ -1,0 +1,13 @@
+{
+    "idf.flashType": "UART",
+    "idf.portWin": "COM4",
+    "idf.gitPath": "C:\\Users\\clarence.alucho\\.espressif\\tools\\idf-git\\cmd\\git.exe",
+    "idf.espIdfPathWin": "d:\\ScannerNew\\esp-idf",
+    "idf.pythonBinPathWin": "C:\\Users\\clarence.alucho\\.espressif\\python_env\\idf4.3_py3.8_env\\Scripts\\python.exe",
+    "idf.customExtraPaths": "C:\\Users\\clarence.alucho\\.espressif\\tools\\xtensa-esp32-elf\\esp-2020r3-8.4.0\\xtensa-esp32-elf\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\xtensa-esp32s2-elf\\esp-2020r3-8.4.0\\xtensa-esp32s2-elf\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\xtensa-esp32s3-elf\\esp-2020r3-8.4.0\\xtensa-esp32s3-elf\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\riscv32-esp-elf\\1.24.0.123_64eb9ff-8.4.0\\riscv32-esp-elf\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\esp32ulp-elf\\2.28.51-esp-20191205\\esp32ulp-elf-binutils\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\esp32s2ulp-elf\\2.28.51-esp-20191205\\esp32s2ulp-elf-binutils\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\cmake\\3.16.4\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\openocd-esp32\\v0.10.0-esp32-20210401\\openocd-esp32\\bin;C:\\Users\\clarence.alucho\\.espressif\\tools\\ninja\\1.10.2;C:\\Users\\clarence.alucho\\.espressif\\tools\\idf-exe\\1.0.1;C:\\Users\\clarence.alucho\\.espressif\\tools\\ccache\\3.7;C:\\Users\\clarence.alucho\\.espressif\\tools\\dfu-util\\0.9\\dfu-util-0.9-win64;C:\\Users\\clarence.alucho\\.espressif\\tools\\idf-python-wheels\\idf4.3_py3.9_2021-01-07",
+    "idf.customExtraVars": "{\"OPENOCD_SCRIPTS\":\"C:\\\\Users\\\\clarence.alucho\\\\.espressif\\\\tools\\\\openocd-esp32\\\\v0.10.0-esp32-20210401/openocd-esp32/share/openocd/scripts\",\"IDF_CCACHE_ENABLE\":\"1\"}",
+    "idf.adapterTargetName": "esp32",
+    "files.associations": {
+        "commlayer.h": "c"
+    }
+}

@@ -49,7 +49,7 @@ void NS_spiSendReceive(uint8_t* tx_rx, int length)
         .tx_buffer = tx_rx
     };
 
-    spi_device_transmit(spiHandle, &spiTransaction);
+    ESP_ERROR_CHECK(spi_device_transmit(spiHandle, &spiTransaction));
 }
 
 uint16_t NS_sendSpi(char* str, uint8_t* rx)

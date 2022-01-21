@@ -4,6 +4,7 @@
 #include "powerManagement.h"
 
 #define BQ25703A_CHIP_ADDR      0x6B
+#define BQ25703A_TIMOUT_MS      1000
 
 typedef enum {
     REG_CHARGEOPTION0_HIGH = 0x1,

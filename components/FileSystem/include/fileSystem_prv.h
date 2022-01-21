@@ -25,6 +25,7 @@
 #define INACTIVE_TIMEOUT_FILE_NAME  BASE_PATH"/inactiveTimeout.bin"
 #define TEMPERATURE_WINDOW_FILE_NAME  BASE_PATH"/temperatureWindow.bin"
 #define BATTERY_LOG_FILE_NAME           BASE_PATH"/batteryLog.bin"
+#define GAUGE_RESET_COUNT_FILE_NAME     BASE_PATH"/GaugeResets.bin"
 #define CURRENT_FIRMWARE_MAGIC_ID   1
 #define MAX_NUM_OF_FILES            999
 

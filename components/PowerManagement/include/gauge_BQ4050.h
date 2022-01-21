@@ -3,6 +3,59 @@
 
 #include "powerManagement.h"
 #include <math.h>
+#define BQ4050_TIMOUT_MS        1000
+
+#define MAC_BLOCK_COMMAND       0x44
+#define GOLDEN_FILE_SIZE        8192
+#define FLASH_BLOCK_SIZE        32
+#define NUM_FLASH_WRITES        GOLDEN_FILE_SIZE / FLASH_BLOCK_SIZE
+#define MAX_WRITE_RETRIES       100
+
+typedef enum {
+    MAC_DEVICETYPE = 0x0001,                        // Read only
+    MAC_FIRMWAREVERSION = 0x0002,                   // Read only
+    MAC_HARDWAREVERSION = 0x0003,                   // Read only
+    MAC_IFCHECKSUM = 0x0004,                        // Read only
+    MAC_STATICDFSIGNATURE = 0x0005,                 // Read only
+    MAC_AIIDFSIGNATURE = 0x0009,                    // Read only
+    MAC_SHUTDOWNMODE = 0x0010,                      // Write only
+    MAC_SLEEPMODE = 0x0011,                         // Write only
+    MAC_FUSETOGGLE = 0x001D,                        // Write only
+    MAC_PRECHARGEFET = 0x001E,                      // Write only
+    MAC_CHARGEFET = 0x001F,                         // Write only
+    MAC_DISCHARGEFET = 0x0020,                      // Write only
+    MAC_FETCONTROL = 0x0022,                        // Write only
+    MAC_LIFETIMEDATACOLLECTION = 0x0023,            // Write only
+    MAC_PERMANENTFAILURE = 0x0024,                  // Write only
+    MAC_BLACKBOXRECORDERRESET = 0x002A,             // Write only
+    MAC_CALIBRATIONMODE = 0x002D,                   // Write only
+    MAC_SEALDEVICE = 0x0030,                        // Write only
+    MAC_SECURITYKEYS = 0x0035,                      // R/W
+    MAC_AUTHENTICATIONKEY = 0x0037,                 // R/W
+    MAC_DEVICERESET = 0x0041,                       // Write only
+    MAC_SAFETYALERT = 0x0050,                       // Read only
+    MAC_SAFETYSTATUS = 0x0051,                      // Read only
+    MAC_PFALERT = 0x0052,                           // Read only
+    MAC_PFSTATUS = 0x0053,                          // Read only
+    MAC_OPERATIONSTATUS = 0x0054,                   // Read only
+    MAC_CHARGINGSTATUS = 0x0055,                    // Read only
+    MAC_GAUGINGSTATUS = 0x0056,                     // Read only
+    MAC_MANUFACTURINGSTATUS = 0x0057,               // Read only
+    MAC_AFEREGISTER = 0x0058,                       // Read only
+    MAC_LIFETIMEDATABLOCK1 = 0x0060,                // Read only
+    MAC_LIFETIMEDATABLOCK2 = 0x0061,                // Read only
+    MAC_LIFETIMEDATABLOCK3 = 0x0062,                // Read only
+    MAC_LIFETIMEDATABLOCK4 = 0x0063,                // Read only
+    MAC_LIFETIMEDATABLOCK5 = 0x0064,                // Read only
+    MAC_MANUFACTURERINFO = 0x0070,                  // Read only
+    MAC_DASTATUS1 = 0x0071,                         // Read only
+    MAC_DASTATUS2 = 0x0072,                         // Read only
+    MAC_MANUFACTURERINFO2 = 0x007A,                 // Read only
+    MAC_ROMMODE = 0x0F00,                           // Write only
+    MAC_EXITCALIBRATIONOUTPUT = 0xF080,             // R/W
+    MAC_OUTPUTCCANDADCFORCALIBRATION = 0xF081,      // R/W
+    MAC_OUTPUTSHORTEDCCANDADCFORCALIBR = 0xF082,    // R/W
+} MACCommand_t;
 
 typedef enum {
     Flash_Data_Access = 0x4000,
@@ -82,6 +135,34 @@ typedef enum {
     SBS_CELLVOLTAGE1 = 0x3F,
     SBS_STATEOFHEALTH = 0x4F,	        // unit %
 } SBSCommand_t;
+
+typedef enum {
+    SAFETY_STATUS_FLAG_CUV = 1 << 0,
+    SAFETY_STATUS_FLAG_COV = 1 << 1,
+    SAFETY_STATUS_FLAG_OCC1 = 1 << 2,
+    SAFETY_STATUS_FLAG_OCC2 = 1 << 3,
+    SAFETY_STATUS_FLAG_OCD1 = 1 << 4,
+    SAFETY_STATUS_FLAG_OCD2 = 1 << 5,
+    SAFETY_STATUS_FLAG_AOLD = 1 << 6,
+    SAFETY_STATUS_FLAG_AOLDL = 1 << 7,
+    SAFETY_STATUS_FLAG_ASCC = 1 << 8,
+    SAFETY_STATUS_FLAG_ASCCL = 1 << 9,
+    SAFETY_STATUS_FLAG_ASCD = 1 << 10,
+    SAFETY_STATUS_FLAG_ASCDL = 1 << 11,
+    SAFETY_STATUS_FLAG_OTC = 1 << 12,
+    SAFETY_STATUS_FLAG_OTD = 1 << 13,
+    SAFETY_STATUS_FLAG_CUVC = 1 << 14,
+    SAFETY_STATUS_FLAG_OTF = 1 << 16,
+    SAFETY_STATUS_FLAG_PTO = 1 << 18,
+    SAFETY_STATUS_FLAG_CTO = 1 << 20,
+    SAFETY_STATUS_FLAG_OC = 1 << 22,
+    SAFETY_STATUS_FLAG_CHGC = 1 << 23,
+    SAFETY_STATUS_FLAG_CHGV = 1 << 24,
+    SAFETY_STATUS_FLAG_PCHGC = 1 << 25,
+    SAFETY_STATUS_FLAG_UTC = 1 << 26,
+    SAFETY_STATUS_FLAG_UTD = 1 << 27,
+
+}safety_status_flag_t;
 typedef struct {
     uint16_t address;
     union {

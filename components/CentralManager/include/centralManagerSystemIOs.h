@@ -25,6 +25,7 @@
 
 #define  IO_PM_I2C_SCL      23
 #define  IO_PM_I2C_SDA      22
+#define IO_PM_GAUGE_PRES    17
 
 typedef struct {
     uint8_t io_scan_button_pin;

@@ -40,7 +40,10 @@ typedef enum {
     OPID_READ_MOTHER_BOARD_VERSION_FILE = 0x27,
     OPID_SAVE_INACTIVE_TIMEOUT = 0x28,
     OPID_SAVE_TEMPERATURE_WINDOW = 0x29,
-    OPID_GET_BATTERY_LOG = 0x30
+    OPID_GET_BATTERY_LOG = 0x30,
+    OPID_GET_RESET_GAUGE_COUNT = 0x40,
+    OPID_CLEAR_GAUGE_RESET_COUNT = 0x41,
+    OPID_CLEAR_BATTERY_LOG = 0x42,
 } MemOperationID_t;
 
 typedef enum {
@@ -54,6 +57,8 @@ typedef enum {
     OPID_RESET_ECU          = 0x85,
     OPID_ENTER_DEBUG_MODE   = 0x86,
     OPID_GET_LIFE_TIME_DATA = 0x87,
+    OPID_INIT_AND_RESET_GAUGE = 0x88,
+    OPID_SAFETY_STATUS_REQ   = 0xA0,
 } SysOperationID_t;
 
 typedef enum {
@@ -69,6 +74,10 @@ typedef enum{
     OPID_MAINTENANCE_SAVE_GAUGE_INFO = 0x00,
 }MaintenanceOperationID_t;
 
+typedef enum{
+    MOTHER_BOARD_VERSION_G = 7,
+    MOTHER_BOARD_VERSION_H = 8,
+}mother_board_version_t;
 typedef enum {
     BUTTON_SHORT_PRESS,     //Short press
     BUTTON_LONG_PRESS,      //Long press
@@ -78,8 +87,37 @@ typedef enum{
     EVENT_TYPE_PERIODIC_CHECK = 0x00,
     EVENT_TYPE_SHUT_DOWN = 0x01,
     EVENT_TYPE_POWER_UP = 0x02,
+    EVENT_TYPE_EMERGENCY_SHUT_DOWN = 0x03,
     EVENT_TYPE_MAX = 0xFF,
 }event_type_t;
+
+typedef enum{
+    SAFETY_STATUS_CELL_UNDER_VOLTAGE = (1<<0),
+    SAFETY_STATUS_CELL_OVER_VOLTAGE = (1<<1),
+    SAFETY_STATUS_OVER_CURRENT_IN_CHARGE = (1<<2),
+    SAFETY_STATUS_OVER_CURRENT_IN_DISCHARGE = (1<<3),
+    SAFETY_STATUS_OVER_LOAD_IN_DISCHARGE = (1<<4),
+    SAFETY_STATUS_SHORT_CIRCUIT_IN_CHARGE = (1<<5),
+    SAFETY_STATUS_SHORT_CIRCUIT_IN_DISCHARGE = (1<<6),
+    SAFETY_STATUS_OVER_TEMPERATURE_IN_CHARGE = (1<<7),
+    SAFETY_STATUS_OVER_TEMPERATURE_IN_DISCHARGE = (1<<8),
+    SAFETY_STATUS_OVER_TEMPERATURE_IN_FET = (1<<9),
+    SAFETY_STATUS_UNDER_TEMPERATURE_IN_CHARGE = (1<<10),
+    SAFETY_STATUS_UNDER_TEMPERATURE_IN_DISCHARGE = (1<<11),
+    SAFETY_STATUS_SBS_WATCH_DOG = (1<<12),
+    SAFETY_STATUS_PRE_CHARGE_TIMEOUT = (1<<13),
+    SAFETY_STATUS_FAST_CHARGE_TIMEOUT = (1<<14),
+    SAFETY_STATUS_OVER_CHARGE_ALERT = (1<<15),
+    SAFETY_STATUS_OVER_CHARGE = (1<<16),
+    SAFETY_STATUS_OVER_CHARGING_VOLTAGE = (1<<17),
+    SAFETY_STATUS_OVER_CHARGING_CURRENT = (1<<18),
+    SAFETY_STATUS_OVER_PRE_CHARGING_CURRENT = (1<<19),
+    SAFETY_STATUS_OPERATION_PRES_LOW = (1 << 20),
+}safety_status_error_type_t;
+typedef enum{
+    SAFETY_STATUS_ACTION_REPORT,
+    SAFETY_STATUS_ACTION_TOGGLE_PRES,
+}safety_status_action_t;
 
 typedef struct {
     uint16_t battVoltage;
@@ -100,7 +138,7 @@ typedef struct {
     uint32_t mfgStatus;
     uint32_t operationStatus;
     uint32_t cycleCount;
-
+    uint32_t safetyAlert;
     uint8_t fC      :1;
     uint8_t VCT     :1;
     uint8_t xchg    :1;
@@ -206,7 +244,8 @@ typedef struct {
 } DATA_TYPE_ATTRIBUTE AppVersion_t;
 
 typedef struct {
-    uint16_t length;
+    uint16_t total_length;
+    uint16_t entry_size;
     uint8_t* data_bytes;
 }generic_data_packet_t;
 typedef struct {
@@ -342,6 +381,7 @@ typedef struct {
     union {
         battery_data_t batReq;
         uint64_t sensorID;
+        uint64_t safety_status_errors;
         uint32_t temperature;
         struct{
             uint32_t charger_status;

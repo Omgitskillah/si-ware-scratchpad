@@ -6,6 +6,7 @@
 #define TAG        "OLED"
 static OLED_bluetoothMode_t _bluetooth_start_mode = BLUETOOTH_ADVERTISEMENT;
 static TimerHandle_t progress_timer;
+static bool oled_connected = true;
 
 static void OLED_delay(TickType_t millis)
 {
@@ -16,6 +17,9 @@ static void OLED_delay(TickType_t millis)
 
 static void OLED_splashScreen()
 {
+    if(!oled_connected){
+        return;
+    }
     //Splash Screen with Logo
     xSemaphoreTake(xMutex, (TickType_t) portMAX_DELAY);
 
@@ -269,12 +273,14 @@ static void OLED_readyTimerCB(TimerHandle_t pxTimer)
 _Noreturn static void OLED_startingTask(void *parameters)
 {
     ESP_LOGI(TAG, "Start OLED_managment Task");
-    OLED_clearScreen();
-    OLED_batteryStatus(_initialBatteryPercentage, _chargerStatus);
-    OLED_storageSize(_initialMemorySize);
-    OLED_message(OLED_MSGTEXT_READY, MESSAGE_INFO);
-    _oledStarted = true;
-    OLED_bluetooth(_bluetooth_start_mode);
+    if(oled_connected) {
+        OLED_clearScreen();
+        OLED_batteryStatus(_initialBatteryPercentage, _chargerStatus);
+        OLED_storageSize(_initialMemorySize);
+        OLED_message(OLED_MSGTEXT_READY, MESSAGE_INFO);
+        _oledStarted = true;
+        OLED_bluetooth(_bluetooth_start_mode);
+    }
 
     // int progressMillis = 0, delayCycle = 0;
     // //	int i = 100, j = 0, a = 0;
@@ -407,14 +413,45 @@ static void OLED_SetupIO(){
             .mode = GPIO_MODE_OUTPUT,
             .intr_type = GPIO_INTR_DISABLE,
             .pin_bit_mask = ((1ULL << IO_OLED_DCDCEN)),
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_ENABLE,
             .pull_up_en = GPIO_PULLUP_DISABLE,
     };
     gpio_config(&conf2);
     gpio_set_level(IO_OLED_DCDCEN, 1);
 }
+bool OLED_is_connected(){
+    i2c_config_t conf = {
+            .mode = I2C_MODE_MASTER,
+            .scl_io_num = IO_OLED_SCL,
+            .sda_io_num = IO_OLED_SDA,
+            .scl_pullup_en = GPIO_PULLUP_ENABLE,
+            .sda_pullup_en = GPIO_PULLUP_ENABLE,
+            .master = {
+                    .clk_speed = I2C_MASTER_FREQ_HZ,
+            },
+            .clk_flags = 0,
+    };
+
+    ERROR_CHECK(TAG, i2c_param_config(I2C_MASTER_NUM, &conf));
+    // vTaskDelay(pdMS_TO_TICKS(500));
+    ERROR_CHECK(TAG, i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0));
+    i2c_cmd_handle_t i2c_handle = i2c_cmd_link_create();
+    configASSERT(i2c_handle); //check that not NULL
+    esp_err_t err = ESP_OK;
+    err |= i2c_master_start(i2c_handle);
+    err |= i2c_master_write_byte(i2c_handle,I2C_OLED_ADDRESS | I2C_MASTER_WRITE,ACK_CHECK_EN);
+    err |= i2c_master_stop(i2c_handle);
+    err |= i2c_master_cmd_begin(I2C_MASTER_NUM,i2c_handle, pdMS_TO_TICKS(1000));
+    i2c_driver_delete(I2C_MASTER_NUM);  //Delete the driver so the u8g2 library can use it
+    ESP_LOGI(TAG,"OLED check result is %d",err);
+    return err == ESP_OK;
+}
 void OLED_setupFirstStage(){
     OLED_SetupIO();
+    oled_connected = OLED_is_connected();
+    if(!oled_connected){
+        return;
+    }
     u8g2_esp32_hal_t u8g2_esp32_hal = {
             .sda = IO_OLED_SDA,
             .scl = IO_OLED_SCL,
@@ -425,7 +462,6 @@ void OLED_setupFirstStage(){
                                         u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
 
     u8x8_SetI2CAddress(&u8g2.u8x8, I2C_OLED_ADDRESS);
-
     u8g2_InitDisplay(&u8g2);     // send init sequence to the display, display is in sleep mode after this,
     u8g2_SetPowerSave(&u8g2, 0); // wake up display
     xTaskCreate(OLED_splashScreenTask, "OLED_splashScreenTask", 4096, NULL, 2, NULL);
@@ -448,6 +484,9 @@ void OLED_setupSecondStage(uint16_t initialMemorySize, uint8_t initialBatteryPer
 
 void OLED_shutdown(uint8_t emergencyShutdown)
 {
+    if(!_oledStarted){
+        return;
+    }
     if(!emergencyShutdown){
         OLED_message(OLED_MSGTEXT_PWROFF, MESSAGE_INFO);
     }else{
@@ -554,6 +593,8 @@ void OLED_responseTask(void *parameters)
                             low_battery = 0;
 
                         }
+                    }else if(resp.packet.sysResponse.operationID == OPID_SAFETY_STATUS_REQ){
+                        OLED_message(OLED_MSGTEXT_READY,MESSAGE_INFO);
                     }
                     break;
                 case RESPONSEPACKET_MEMORY:
@@ -611,55 +652,52 @@ _Noreturn static void OLED_progressTask(void *parameters)
     while (true)
     {
         OLED_progress_message_t progress_message;
-        if (xQueueReceive(progress_queue, &progress_message, portMAX_DELAY))
-        {
-            //We have received a proper message
-            switch (progress_message.message_type)
-            {
-                case OLED_PROGRESS_START:
-                    numSteps = ceil((double) progress_message.time_in_millis / OLED_PROGRESS_INTERVAL);
-                    barIncrement = 80.0 / numSteps;
-                    xTimerStart(progress_timer, portMAX_DELAY);
-                    progressStarted = 1;
-                    break;
-                case OLED_PROGRESS_STEP:
-                    if (!progressStarted)
-                    {
+        if (xQueueReceive(progress_queue, &progress_message, portMAX_DELAY)) {
+            if (_oledStarted) {
+                //We have received a proper message
+                switch (progress_message.message_type) {
+                    case OLED_PROGRESS_START:
+                        numSteps = ceil((double) progress_message.time_in_millis / OLED_PROGRESS_INTERVAL);
+                        barIncrement = 80.0 / numSteps;
+                        xTimerStart(progress_timer, portMAX_DELAY);
+                        progressStarted = 1;
                         break;
-                    }
-                    //This will draw a box starting from (48,120) start of the progress bar with height of 8
-                    //so that it reaches (x,128) this x will increase by (128-48)/NUM_STEPS each steps
-                    xSemaphoreTake(xMutex, portMAX_DELAY);
-                    if (uxQueueMessagesWaiting(progress_queue) > 0)
-                    {
-                        //This is to guard against the condition that the timer gave a progress step, then the
-                        //task gave a stop message, but the progress task took the progress and is now trying to draw
-                        //but it can't because scan done is being written, so it writes over scan written, which
-                        //is something that we don't want, so after taking the mutex we just make sure that no one wants anything
-                        //The timer is timed slower than the drawing logic, so I am not afraid that the timer will send me messages
-                        //here
+                    case OLED_PROGRESS_STEP:
+                        if (!progressStarted) {
+                            break;
+                        }
+                        //This will draw a box starting from (48,120) start of the progress bar with height of 8
+                        //so that it reaches (x,128) this x will increase by (128-48)/NUM_STEPS each steps
+                        xSemaphoreTake(xMutex, portMAX_DELAY);
+                        if (uxQueueMessagesWaiting(progress_queue) > 0) {
+                            //This is to guard against the condition that the timer gave a progress step, then the
+                            //task gave a stop message, but the progress task took the progress and is now trying to draw
+                            //but it can't because scan done is being written, so it writes over scan written, which
+                            //is something that we don't want, so after taking the mutex we just make sure that no one wants anything
+                            //The timer is timed slower than the drawing logic, so I am not afraid that the timer will send me messages
+                            //here
+                            xSemaphoreGive(xMutex);
+                            break;
+                        }
+                        //This is to allow the box to be drawn every time with the fraction part removed, yet in the last time
+                        // it will be complete and draw the full 80 pixels
+                        u8g2_DrawBox(&u8g2, 48, 120, (uint32_t) ((double) (++step_counter) * barIncrement), 8);
+                        u8g2_SendBuffer(&u8g2);
                         xSemaphoreGive(xMutex);
+                        if (step_counter < numSteps) {
+                            break;
+                        }
+                    case OLED_PROGRESS_STOP:
+                        xTimerStop(progress_timer, portMAX_DELAY);
+                        //There maybe some messages in the queue due to the timer, just ignore them
+                        xQueueReset(progress_queue);
+                        step_counter = 0;
+                        progressStarted = 0;
                         break;
-                    }
-                    //This is to allow the box to be drawn every time with the fraction part removed, yet in the last time
-                    // it will be complete and draw the full 80 pixels
-                    u8g2_DrawBox(&u8g2, 48, 120, (uint32_t)((double)(++step_counter) * barIncrement), 8);
-                    u8g2_SendBuffer(&u8g2);
-                    xSemaphoreGive(xMutex);
-                    if (step_counter < numSteps)
-                    {
-                        break;
-                    }
-                case OLED_PROGRESS_STOP:
-                    xTimerStop(progress_timer, portMAX_DELAY);
-                    //There maybe some messages in the queue due to the timer, just ignore them
-                    xQueueReset(progress_queue);
-                    step_counter = 0;
-                    progressStarted = 0;
-                    break;
-            }
-            ESP_LOGI(TAG, "Remaining stack from progress task %d bytes", uxTaskGetStackHighWaterMark(NULL));
+                }
+                ESP_LOGI(TAG, "Remaining stack from progress task %d bytes", uxTaskGetStackHighWaterMark(NULL));
 
+            }
         }
     }
 }

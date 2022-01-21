@@ -24,15 +24,27 @@ static void centralManager_sleep(uint8_t emergencyShutdown);
 static void centralManager_periodicBatteryCheck(TimerHandle_t xTimer);
 static void centralManager_prepareBatteryLogPacket(event_type_t event);
 static void centralManager_runMaintenanceTask(MaintenanceRequestPacket_t* request_packet);
+static void centralManager_run_powerManagement_init(bool write_golden_file,bool init_gauge,bool init_pm){
+    if(init_pm){
+        PM_init(init_gauge,write_golden_file);
+        if(init_gauge || write_golden_file){
+            fileSystem_register_gauge_reset();
+        }
+    }else if(init_gauge){
+        PM_init_reset_gauge();
+        fileSystem_register_gauge_reset();
+    }
+}
 
 static io_config_t system_io_config;
 static oldFormatGaugeInfo_t oldFormatGaugeInfo;
 uint8_t sharedStaticMemory[SHARED_MEMORY_SIZE] = GOLDEN_REGISTER_FILE;
 char error_string[ERROR_STRING_SIZE + 1];
-
+static uint32_t central_manager_mother_board_version = 0;
 static bool _bleConnected = false;
 static bool _uartConnected = false;
 static battery_data_t _battery_data;
+static ScannerError_t central_manager_last_safety_error;
 
 static ScannerSettings_t _scannerSettings = {
         .apodizationSel = 0,    //Boxcar
@@ -66,12 +78,21 @@ static void centralManager_inactive_timer_callback(TimerHandle_t xTimer) {
 }
 
 static void centralManager_sleep(uint8_t emergencyShutdown) {
-    OLED_shutdown(emergencyShutdown);
-    PM_sleep();
-    ESP_LOGI(TAG, "Going to Sleep");
-    centralManager_prepareBatteryLogPacket(EVENT_TYPE_SHUT_DOWN);
+
+    if(emergencyShutdown)
+    {
+        centralManager_prepareBatteryLogPacket(EVENT_TYPE_EMERGENCY_SHUT_DOWN);
+    }
+    else
+    {
+        centralManager_prepareBatteryLogPacket(EVENT_TYPE_SHUT_DOWN);
+    }
     vTaskDelay(20);
     xEventGroupWaitBits(availableTasks,ALL_REQUEST_BITS,pdFALSE,pdTRUE,portMAX_DELAY);//Wait till the request is done
+    
+    OLED_shutdown(emergencyShutdown);
+    PM_sleep(emergencyShutdown);
+    ESP_LOGI(TAG, "Going to Sleep");
 
     esp_deep_sleep_start();
 }
@@ -185,7 +206,7 @@ void centralManager_buttonsInit(uint32_t mother_board_version) {
             // HIGH = non pressed, LOW = pressed
             .pin_bit_mask = ((1ULL << system_io_config.io_scan_button_pin) |
                              (1ULL << system_io_config.io_power_button_pin)),
-            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
     gpio_config(&conf);
@@ -212,7 +233,6 @@ void centralManager_systemStart() {
     uint8_t batteryPercentage;
     uint16_t memorySize;
     uint32_t chargerState;
-    uint32_t mother_board_version = 0;
     uint32_t inactive_timeout = INACTIVE_TIMER_DEFAULT_PERIOD;
     ScannerID_t scannerID = {
             .id = {0},
@@ -223,8 +243,10 @@ void centralManager_systemStart() {
     centralManager_createQueues();
     centralManager_io_isr_init();
     fileSystem_init_flash();
-    if (!fileSystem_is_gauge_golden_file_burnt()) {
-        PM_init(true, true);
+    if (fileSystem_is_gauge_golden_file_burnt()) {
+//        fileSystem_register_gauge_reset();
+//        PM_init(true, true);
+        centralManager_run_powerManagement_init(true,true,true);
         ESP_LOGI(TAG, "Done with PM Init");
         fileSystem_register_golden_file_burnt();
         //Restart the ECU
@@ -232,11 +254,16 @@ void centralManager_systemStart() {
     } else {
         ESP_LOGI(TAG,"Reset Reason is %d",esp_reset_reason());
         ESP_LOGI(TAG,"Wakeup Reason is %d",esp_sleep_get_wakeup_cause());
-        if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED && esp_reset_reason() == ESP_RST_POWERON){
-            ESP_LOGI(TAG,"Initializing Gauge");
-            PM_init(true, 0);
+        fileSystem_save_reset_and_wakeup_reason(esp_reset_reason(),esp_sleep_get_wakeup_cause());
+        if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED && (esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_WDT)){
+//            fileSystem_register_gauge_reset();
+            ESP_LOGI(TAG,"Initializing Gauge with Reset");
+//            PM_init(true, 0);
+            centralManager_run_powerManagement_init(false,true,true);
         }else{
-            PM_init(false, 0);
+//            PM_init(false, 0);
+            ESP_LOGI(TAG,"Initializing Gauge without Reset");
+            centralManager_run_powerManagement_init(false,false,true);
         }
     }
 
@@ -257,9 +284,9 @@ void centralManager_systemStart() {
     };
     TemperatureReading temperature = NS_getTemperature();
     fileSystem_init(&_scannerSettings, &scannerID, &memorySize, &background, &sourceSettingsObject, &temperature,
-                    &mother_board_version, &inactive_timeout, &NS_temperature_window);
+                    &central_manager_mother_board_version, &inactive_timeout, &NS_temperature_window);
     print_scanner_settings(&_scannerSettings);
-    centralManager_buttonsInit(mother_board_version);
+    centralManager_buttonsInit(central_manager_mother_board_version);
 
     if (scannerID.id[0] == 0)
         NS_getScannerID(&scannerID);
@@ -285,12 +312,17 @@ void centralManager_systemStart() {
     esp_log_set_vprintf(uartManager_log);
 //    ESP_LOGI(TAG,"SharedMemoryAddress is %p",&sharedStaticMemory[0]);
     ESP_LOGI(TAG, "Starting Inactive Timeout Timer with %d minutes", inactive_timeout);
+
     inactiveTimer = xTimerCreate("Active Time Timer", pdMS_TO_TICKS(inactive_timeout * 60 * 1000), pdFALSE, NULL,
                                  centralManager_inactive_timer_callback);
-    xTimerStart(inactiveTimer, portMAX_DELAY);
+//    ESP_LOGI(TAG,"Timer disable value is %x",INACTIVE_TIMER_DISABLE);
+    if(inactive_timeout != INACTIVE_TIMER_DISABLE){
+        xTimerStart(inactiveTimer, portMAX_DELAY);
+    }
+    centralManager_prepareBatteryLogPacket(EVENT_TYPE_POWER_UP);
+
     TimerHandle_t periodic_check_timer = xTimerCreate("Periodic Battery Check", pdMS_TO_TICKS(PERIODIC_CHECK_PERIOD),pdTRUE,NULL,centralManager_periodicBatteryCheck);
     xTimerStart(periodic_check_timer,portMAX_DELAY);
-    centralManager_prepareBatteryLogPacket(EVENT_TYPE_POWER_UP);
     centralManager_centralTasks();
 }
 
@@ -410,6 +442,12 @@ static void centralManager_systemRequest(SysRequestPacket_t *rp) {
             //GOOD BYE CRUEL WORLD, HTW74ONY WLAHY
             esp_restart();  //This will be the last line to be executed before ecu reset, this function doesn't return
             break;
+        case OPID_INIT_AND_RESET_GAUGE:
+            ESP_LOGI(TAG,"Resetting Gauge");
+            centralManager_run_powerManagement_init(false,true,false);
+//            PM_init_reset_gauge();
+//            fileSystem_register_gauge_reset();
+            break;
         case OPID_ENTER_DEBUG_MODE:
             ESP_LOGI(TAG, "Entering Debug Mode");
             uartManager_disableTimerForDebug();
@@ -430,7 +468,9 @@ _Noreturn void centralManager_requestsTask() {
 //        ESP_LOGI(TAG,"RequestsTaskPriority = %d",uxTaskPriorityGet(NULL));  //1
         //Reset the activity timer, so we won't shut down the device
         if(requestPacket.packetType != REQUESTPACKET_MAINTENANCE){
-            xTimerReset(inactiveTimer, portMAX_DELAY);
+            if(xTimerIsTimerActive(inactiveTimer)){
+                xTimerReset(inactiveTimer, portMAX_DELAY);
+            }
         }
 
         centralManager_createTask(OLED_requestTask, OLED_REQUEST_TASK_BIT,
@@ -552,6 +592,9 @@ _Noreturn void centralManager_responseTask(void *parameters) {
             respPacket.packet.sysResponse.operationID == OPID_BATT_REQ &&
             respPacket.statusCode == NoError) {
             _battery_data = respPacket.packet.sysResponse.U.batReq;
+        }
+        if(respPacket.packetType == RESPONSEPACKET_SYSTEM && respPacket.packet.sysResponse.operationID == OPID_SAFETY_STATUS_REQ){
+            central_manager_last_safety_error = respPacket.statusCode;  //log the error, no idea what to do with it actually
         }
 
         centralManager_createTask(OLED_responseTask, OLED_RESPONSE_TASK_BIT,
@@ -748,10 +791,18 @@ ScannerError_t centralManager_check_battery_level(uint8_t requires_scan) {
 
 esp_err_t centralManager_set_inactive_timeout(uint32_t inactive_timeout) {
     //Time out is in minutes
+    if(inactive_timeout == INACTIVE_TIMER_DISABLE){
+        ESP_LOGI(TAG,"Disabling inactive timeout");
+        return xTimerStop(inactiveTimer,portMAX_DELAY);
+    }
     xTimerReset(inactiveTimer, portMAX_DELAY);
     return xTimerChangePeriod(inactiveTimer, pdMS_TO_TICKS(inactive_timeout * 60 * 1000), portMAX_DELAY);
 }
 
 void centralManager_set_scan_temperature_window(uint8_t temperature_window) {
     NS_temperature_window = temperature_window;
+}
+
+uint32_t centralManager_get_mother_board_version() {
+    return central_manager_mother_board_version;
 }
