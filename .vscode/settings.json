@@ -8,6 +8,8 @@
     "idf.customExtraVars": "{\"OPENOCD_SCRIPTS\":\"C:\\\\Users\\\\clarence.alucho\\\\.espressif\\\\tools\\\\openocd-esp32\\\\v0.10.0-esp32-20210401/openocd-esp32/share/openocd/scripts\",\"IDF_CCACHE_ENABLE\":\"1\"}",
     "idf.adapterTargetName": "esp32",
     "files.associations": {
-        "commlayer.h": "c"
+        "commlayer.h": "c",
+        "gauge_bq4050.h": "c",
+        "streambuf": "c"
     }
 }

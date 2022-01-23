@@ -29,10 +29,17 @@ static GaugeWriteCommand_t init_command_set[] =
     {.U.data = 0x41,   .address = Flash_FET_options,        .size = 1, .successfully_written = 0},   //FET Options register
 };
 
+uint8_t bq4050_scratchpad[32];
+
+/* function prototypes */
+static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size); 
+static esp_err_t gauge_MACRead(uint16_t command, uint8_t *data_out);
+
+
 static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size) 
 {
     // this could be clean up using a statem machine
-    esp_err_t err = ESP_OK;
+    esp_err_t err = ESP_FAIL;
 
     if( ( NULL == data_in) && ( 0 != size) )
     {
@@ -41,7 +48,11 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
 
-    if( NULL != packet )
+    if( NULL == packet )
+    {
+        ESP_LOGW(TAG, "failed to create I2C link");
+    }
+    else
     {
         err = i2c_master_start(packet);
 
@@ -95,7 +106,110 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
     return err;
 }
 
-static esp_err_t gauge_writeCommands(GaugeWriteCommand_t *commands, int num_commands, bool use_data_ptr) {
+static esp_err_t gauge_MACRead(uint16_t command, uint8_t *data_out) 
+{
+    // this could be clean up using a statem machine
+    esp_err_t err = ESP_FAIL;
+
+    err = gauge_MACWrite( command, NULL, 0);
+
+    if( ESP_OK != err )
+    {
+        ESP_LOGW(TAG, "failed to write command before the read");
+    }
+    else
+    {
+        i2c_cmd_handle_t packet = i2c_cmd_link_create();
+
+        if( NULL == packet )
+        {
+            ESP_LOGW(TAG, "failed to create I2C link");
+        }
+        else
+        {
+            uint8_t write_address = BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE;
+            uint8_t read_address = BQ4050_SENSOR_ADDR | I2C_MASTER_READ;
+
+            err = i2c_master_start(packet);
+
+            if( ESP_OK != err )
+            {
+                // exit I2C if not successfully started
+                ESP_LOGW(TAG, "Error %u, failed to start I2C", err);
+            }
+            else
+            {
+                uint8_t bytes_count = 0;
+                // write chip write address
+                ERROR_CHECK( TAG, i2c_master_write_byte(packet, write_address, true) );
+                // write MAC address
+                ERROR_CHECK( TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true) );
+                // send restart
+                ERROR_CHECK( TAG, i2c_master_start(packet) );
+                // send chip read address
+                ERROR_CHECK( TAG, i2c_master_write_byte(packet, read_address, true) );
+                // read the bytes to expect
+                ERROR_CHECK( TAG, i2c_master_read_byte(packet, &bytes_count, I2C_MASTER_ACK) ); 
+                
+                /** should check that this length 
+                 * matches expected length of the command
+                 * and throw a missmatch error and terminate
+                 * to avoid a buffer overflow
+                 **/
+
+                // start I2C exchange
+                ERROR_CHECK( TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)) );
+                // delete current i2c instance
+                i2c_cmd_link_delete(packet);
+
+                if( 0 == bytes_count )
+                {
+                    ESP_LOGW(TAG, "No bytes to read");
+                }
+                else
+                {
+                    // start a new I2C instance
+                    i2c_cmd_handle_t packet = i2c_cmd_link_create();
+
+                    if( NULL == packet )
+                    {
+                        ESP_LOGW(TAG, "failed to create I2C link");
+                    }
+                    else
+                    {
+                        // drop the command returned, might stand to benefit to forward this to the function caller
+                        ERROR_CHECK( TAG, i2c_master_read_byte(packet, data_out, I2C_MASTER_ACK) );
+                        bytes_count--;
+                        ERROR_CHECK( TAG, i2c_master_read_byte(packet, data_out, I2C_MASTER_ACK) );
+                        bytes_count--;
+
+                        while( bytes_count < 1 )
+                        {
+                            // read and ack all the bytes
+                            ERROR_CHECK( TAG, i2c_master_read_byte(packet, (data_out++), I2C_MASTER_ACK) );
+                        }
+
+                        // Nack the last byte
+                        ERROR_CHECK( TAG, i2c_master_read_byte(packet, (data_out++), I2C_MASTER_NACK) );
+                        // send i2c stop
+                        ERROR_CHECK( TAG, i2c_master_stop(packet) );
+                        // start the i2c reads
+                        ERROR_CHECK( TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)) );
+                        // delete i2c instance
+                        i2c_cmd_link_delete(packet);
+                    }
+                }
+            }
+
+        }
+    }
+
+    return err;
+}
+
+/* function might nolonger be needed */
+static esp_err_t gauge_writeCommands(GaugeWriteCommand_t *commands, int num_commands, bool use_data_ptr) 
+{
     uint8_t unable_to_write_ctr = 0;
     uint8_t trial_ctr = 0;
 
@@ -126,88 +240,16 @@ static esp_err_t gauge_writeCommands(GaugeWriteCommand_t *commands, int num_comm
     }
 }
 
-static uint8_t gauge_MACRead(uint16_t command, uint8_t *data_out) {
-    uint8_t len = 0, dummy = 0;
-
-    gauge_MACWrite(command, NULL, 0);
-
-    i2c_cmd_handle_t packet = i2c_cmd_link_create();
-    ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_WRITE, true));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
-    ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_READ, true));
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &len, I2C_MASTER_ACK));
-    vTaskDelay(pdMS_TO_TICKS(20));
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
-    i2c_cmd_link_delete(packet);
-    if(len == 0){
-        return 0;
-    }
-    packet = i2c_cmd_link_create();
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &dummy, I2C_MASTER_ACK)); //read command byte0
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &dummy, I2C_MASTER_ACK)); //read command byte1
-    ERROR_CHECK(TAG,i2c_master_read(packet,data_out,len-3,I2C_MASTER_ACK));
-
-//    for (uint8_t i = 0; i < len - 3; i++)
-//    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &data_out[i], I2C_MASTER_ACK));
-
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &data_out[len - 3], I2C_MASTER_NACK));
-    ERROR_CHECK(TAG, i2c_master_stop(packet));
-    vTaskDelay(pdMS_TO_TICKS(20));
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
-    i2c_cmd_link_delete(packet);
-    return len -2;
-}
-static void gauge_flashRead(uint16_t starting_address, uint8_t *data_out,uint8_t length){
-    //The flash read always returns a 32 byte of data from the flash, we don't need them
-    //so we only read the first length bytes
-    uint8_t len = 0, dummy = 0;
-
-    gauge_MACWrite(starting_address, NULL, 0);
-
-    i2c_cmd_handle_t packet = i2c_cmd_link_create();
-    ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_WRITE, true));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true));
-    ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, BQ4050_SENSOR_ADDR << 1 | I2C_MASTER_READ, true));
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &len, I2C_MASTER_ACK));
-    vTaskDelay(pdMS_TO_TICKS(20));
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
-    i2c_cmd_link_delete(packet);
-//    ESP_LOGI(TAG,"Flash Read Length = %d",len); //should be 34
-    packet = i2c_cmd_link_create();
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &dummy, I2C_MASTER_ACK)); //read command byte0
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &dummy, I2C_MASTER_ACK)); //read command byte1
-    ERROR_CHECK(TAG,len-2 >= length ? 0 : ESP_FAIL);    //assertion that the length required is less than 32
-    if(len-2 > length){
-        ESP_LOGI(TAG,"Read length from gauge is %d, wanted length is %d",len,length);
-        return;
-    }
-    ERROR_CHECK(TAG,i2c_master_read(packet,data_out,length,I2C_MASTER_ACK));
-    for (uint8_t i = 0; i < len - length - 3; i++){
-        ERROR_CHECK(TAG, i2c_master_read_byte(packet, &dummy, I2C_MASTER_ACK));
-
-    }  //read the remaining data
-    //last byte should be read with NACK
-    ERROR_CHECK(TAG, i2c_master_read_byte(packet, &dummy, I2C_MASTER_NACK));
-    ERROR_CHECK(TAG, i2c_master_stop(packet));
-    vTaskDelay(pdMS_TO_TICKS(20));
-    ERROR_CHECK(TAG, i2c_master_cmd_begin(PM_I2C_NUM, packet, pdMS_TO_TICKS(BQ4050_TIMOUT_MS)));
-    i2c_cmd_link_delete(packet);
-}
-
 static uint16_t gauge_readWord(uint8_t command) {
     uint16_t data_out;
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, command, true));
 
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 0), I2C_MASTER_ACK));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 1), I2C_MASTER_NACK));
     ERROR_CHECK(TAG, i2c_master_stop(packet));
@@ -261,8 +303,9 @@ void gauge_readBatteryInfo(GaugeInfo_t *gaugeInfo) {
     gauge_MACRead(MAC_GAUGINGSTATUS, (uint8_t *) &gaugeInfo->gaugingStatus);
     gauge_MACRead(MAC_MANUFACTURINGSTATUS, (uint8_t *) &gaugeInfo->mfgStatus);
     gauge_MACRead(MAC_SAFETYALERT,(uint8_t*)&gaugeInfo->safetyAlert);
-    gauge_flashRead(Flash_Cycle_Count,(uint8_t*)&gaugeInfo->cycleCount,2);
-//    ESP_LOGI(TAG,"Data Flash Cycle count %d",gaugeInfo->cycleCount);
+
+    gauge_MACRead(Flash_Cycle_Count, bq4050_scratchpad);
+    gaugeInfo->cycleCount = (uint16_t)bq4050_scratchpad[0] | ((uint16_t)bq4050_scratchpad[1] << 8);
 }
 void gauge_read_life_time_data(life_time_data_t* life_time_data){
     uint8_t *data_ptr = (uint8_t*)life_time_data;
@@ -445,6 +488,7 @@ void gauge_writeGoldenFile(uint8_t *goldenFile) {
 
     // I think this can only be done using the BQ studio which understands the length of each register in the data flash. 
     // using FW, we have to respect endianness and data size while writing to the data flash
+    // therefore, we will need to use either the srec file format of the data flash or split the file into registers ourselves
     
     ESP_LOGI(TAG, "Starting to write Golden File");
     GaugeWriteCommand_t *writeCommands = (GaugeWriteCommand_t *) &goldenFile[GOLDEN_FILE_SIZE];
