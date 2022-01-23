@@ -207,39 +207,6 @@ static esp_err_t gauge_MACRead(uint16_t command, uint8_t *data_out)
     return err;
 }
 
-/* function might nolonger be needed */
-static esp_err_t gauge_writeCommands(GaugeWriteCommand_t *commands, int num_commands, bool use_data_ptr) 
-{
-    uint8_t unable_to_write_ctr = 0;
-    uint8_t trial_ctr = 0;
-
-    do 
-    {
-        unable_to_write_ctr = 0;
-        for (int i = 0; i < num_commands; ++i) 
-        {
-            if (!commands[i].successfully_written) 
-            {
-                uint8_t *data_to_send = (use_data_ptr ? commands[i].U.data_ptr : (uint8_t *) &commands[i].U.data);
-                commands[i].successfully_written = (ESP_OK == gauge_MACWrite(commands[i].address, data_to_send, commands[i].size));
-                unable_to_write_ctr += !commands[i].successfully_written;
-            }
-        }
-    } 
-    while ((unable_to_write_ctr != 0) && (++trial_ctr < MAX_WRITE_RETRIES));
-
-    if (trial_ctr >= MAX_WRITE_RETRIES) 
-    {
-        ESP_LOGW(TAG, "Failed after %d Trials", MAX_WRITE_RETRIES);
-        return ESP_FAIL;
-    } 
-    else 
-    {
-        ESP_LOGI(TAG, "Finished Writing Successfully. Failures happened %d times.", trial_ctr);
-        return ESP_OK;
-    }
-}
-
 static uint16_t gauge_readWord(uint8_t command) {
     uint16_t data_out;
 
@@ -490,19 +457,5 @@ void gauge_writeGoldenFile(uint8_t *goldenFile) {
     // using FW, we have to respect endianness and data size while writing to the data flash
     // therefore, we will need to use either the srec file format of the data flash or split the file into registers ourselves
     
-    ESP_LOGI(TAG, "Starting to write Golden File");
-    GaugeWriteCommand_t *writeCommands = (GaugeWriteCommand_t *) &goldenFile[GOLDEN_FILE_SIZE];
-    
-    for (int i = 0; i < NUM_FLASH_WRITES; ++i) 
-    {
-        uint16_t offset = i * FLASH_BLOCK_SIZE;
-        writeCommands[i].address = Flash_Data_Access + offset;
-        writeCommands[i].U.data_ptr = &goldenFile[offset];
-        writeCommands[i].successfully_written = 0;
-        writeCommands[i].size = FLASH_BLOCK_SIZE;
-        ESP_LOGI(TAG, "Perparing Golden file commands, address %x, first byte %x, size %d", writeCommands[i].address,
-                 writeCommands[i].U.data_ptr[0], writeCommands[i].size);
-    }
-
-    ESP_ERROR_CHECK(gauge_writeCommands(writeCommands, NUM_FLASH_WRITES, 1));
+    ESP_LOGI(TAG, "Golden Image no longer being written");
 }
