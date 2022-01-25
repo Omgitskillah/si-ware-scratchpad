@@ -5,7 +5,7 @@
 
 /* Local Defines */
 #define TAG "PowerGauge"
-#define BQ4050_SENSOR_ADDR      0x16
+#define BQ4050_SENSOR_ADDR      0x0B
 #define GOLDEN_FILE_SIZE        8192
 #define FLASH_BLOCK_SIZE        32
 #define GOLDEN_IMG_BLOCK_CNT    GOLDEN_FILE_SIZE / FLASH_BLOCK_SIZE
@@ -72,7 +72,7 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
         }
         else
         {
-            uint8_t write_address = BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE;
+            uint8_t write_address = (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_WRITE;
             uint8_t command_byte_count = sizeof(command); // this will always be 2
             uint8_t total_byte_count = size + command_byte_count;
             // send write address 
@@ -170,8 +170,8 @@ static esp_err_t gauge_MACRead(uint16_t command, uint8_t *data_out)
         }
         else
         {
-            uint8_t write_address = BQ4050_SENSOR_ADDR | I2C_MASTER_WRITE;
-            uint8_t read_address = BQ4050_SENSOR_ADDR | I2C_MASTER_READ;
+            uint8_t write_address = (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_WRITE;
+            uint8_t read_address = (BQ4050_SENSOR_ADDR << 1) | I2C_MASTER_READ;
 
             err = i2c_master_start(packet);
 
@@ -256,11 +256,11 @@ static uint16_t gauge_readWord(uint8_t command)
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_WRITE, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, ((BQ4050_SENSOR_ADDR << 1)) | I2C_MASTER_WRITE, true));
     ERROR_CHECK(TAG, i2c_master_write_byte(packet, command, true));
 
     ERROR_CHECK(TAG, i2c_master_start(packet));
-    ERROR_CHECK(TAG, i2c_master_write_byte(packet, (BQ4050_SENSOR_ADDR) | I2C_MASTER_READ, true));
+    ERROR_CHECK(TAG, i2c_master_write_byte(packet, ((BQ4050_SENSOR_ADDR << 1)) | I2C_MASTER_READ, true));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 0), I2C_MASTER_ACK));
     ERROR_CHECK(TAG, i2c_master_read_byte(packet, ((uint8_t *) &data_out + 1), I2C_MASTER_NACK));
     ERROR_CHECK(TAG, i2c_master_stop(packet));
