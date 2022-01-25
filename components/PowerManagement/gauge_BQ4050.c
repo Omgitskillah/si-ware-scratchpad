@@ -122,6 +122,14 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
             for( uint8_t i = 0; i < size; i++ )
             {
                 ERROR_CHECK( TAG, i2c_master_write_byte(packet, data_in[i], true) );
+                
+                err = i2c_master_write_byte(packet, data_in[i], true);
+                if( ESP_OK != err )
+                {
+                    ESP_LOGI(TAG, "write failed: %u", err);
+                }
+                ERROR_CHECK( TAG, err );
+                ESP_LOGI(TAG, "Writing data: %02x at index: %u", data_in[i], i);
             }
 
             err = i2c_master_stop( packet );
