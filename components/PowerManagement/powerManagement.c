@@ -213,7 +213,7 @@ void PM_wakeup_reason_check() {
 void PM_init(bool initializeGauge, bool writeGoldenFile) {
     PM_i2cInit();
     if (writeGoldenFile) {
-        gauge_writeGoldenFile(sharedStaticMemory);
+        gauge_writeGoldenFile();
         gauge_deviceReset();
     }
 

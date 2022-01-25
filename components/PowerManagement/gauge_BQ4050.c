@@ -1,9 +1,17 @@
 #include "driver/i2c.h"
 #include "gauge_BQ4050.h"
-#define TAG "PowerGauge"
+#include "centralManager_priv.h"
+
 
 /* Local Defines */
+#define TAG "PowerGauge"
 #define BQ4050_SENSOR_ADDR      0x16
+#define GOLDEN_FILE_SIZE        8192
+#define FLASH_BLOCK_SIZE        32
+#define GOLDEN_IMG_BLOCK_CNT    GOLDEN_FILE_SIZE / FLASH_BLOCK_SIZE
+#define BQ4050_TIMOUT_MS        1000
+#define MAC_BLOCK_COMMAND       0x44
+#define MAX_WRITE_RETRIES       100
 
 /* Local variables */
 static GaugeWriteCommand_t init_command_set[] = 
@@ -29,6 +37,7 @@ static GaugeWriteCommand_t init_command_set[] =
     {.U.data = 0x41,   .address = Flash_FET_options,        .size = 1, .successfully_written = 0},   //FET Options register
 };
 
+uint8_t bq4050_golden_img[] = GOLDEN_REGISTER_FILE;
 uint8_t bq4050_scratchpad[32];
 
 /* function prototypes */
@@ -446,16 +455,23 @@ void gauge_init() {
     }
 }
 
-void gauge_writeGoldenFile(uint8_t *goldenFile) {
+void gauge_writeGoldenFile( void ) {
     /**
      * According to the datasheet we can write to the flash in 32 byte blocks, starting from address 0x4000
      * That means we need 8192/32 = 256 write commands, instead of allocating 256 * 8 bytes we can use the memory just next to the golden file
      * since it's 64k and we need only the first 8k, so there is enough memory
      */
-
-    // I think this can only be done using the BQ studio which understands the length of each register in the data flash. 
-    // using FW, we have to respect endianness and data size while writing to the data flash
-    // therefore, we will need to use either the srec file format of the data flash or split the file into registers ourselves
     
-    ESP_LOGI(TAG, "Golden Image no longer being written");
+    ESP_LOGI(TAG, "Buring Golden Image");
+
+    uint16_t current_address = Flash_Data_Access;
+    uint32_t golden_img_index = 0;
+
+    for( uint32_t i = 0; i < GOLDEN_IMG_BLOCK_CNT; i++ )
+    {
+        gauge_MACWrite( current_address, &bq4050_golden_img[golden_img_index], FLASH_BLOCK_SIZE );
+        current_address += FLASH_BLOCK_SIZE;
+        golden_img_index += FLASH_BLOCK_SIZE;
+    }
+
 }

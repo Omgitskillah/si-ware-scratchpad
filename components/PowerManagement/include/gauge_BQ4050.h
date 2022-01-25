@@ -3,13 +3,6 @@
 
 #include "powerManagement.h"
 #include <math.h>
-#define BQ4050_TIMOUT_MS        1000
-
-#define MAC_BLOCK_COMMAND       0x44
-#define GOLDEN_FILE_SIZE        8192
-#define FLASH_BLOCK_SIZE        32
-#define NUM_FLASH_WRITES        GOLDEN_FILE_SIZE / FLASH_BLOCK_SIZE
-#define MAX_WRITE_RETRIES       100
 
 typedef enum {
     MAC_DEVICETYPE = 0x0001,                        // Read only
@@ -179,7 +172,7 @@ void gauge_disable();
 void gauge_enable();
 void gauge_readBatteryInfo(GaugeInfo_t *gaugeInfo);
 void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo);
-void gauge_writeGoldenFile(uint8_t* goldenFile);
+void gauge_writeGoldenFile( void );
 void gauge_read_life_time_data(life_time_data_t* life_time_data);
 void gauge_print_life_time_data(life_time_data_t * life_time_data);
 

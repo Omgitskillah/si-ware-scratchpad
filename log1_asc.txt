@@ -1,0 +1,197 @@
+Docklight Log File (ASCII) - Started 1/25/2022 12:35:11.746 
+ 
+
+1/25/2022 12:35:28.942  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:35:47.883  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:35:47.933  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:35:48.007  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:35:48.098  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:35:48.190  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:35:48.560  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:35:48.929  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:18.160  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:18.251  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:18.343  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:18.437  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:18.807  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:18.900  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:19.226  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:48.447  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:48.480  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:48.586  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:48.677  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:48.770  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:49.095  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:36:49.513  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:18.748  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:18.842  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:18.934  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:19.027  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:19.399  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:19.754  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:49.007  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:49.098  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:49.191  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:49.284  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:49.652  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:37:50.021  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:19.245  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:19.339  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:19.430  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:19.514  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:19.616  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:19.708  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:20.032  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:20.447  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:49.668  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:49.761  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:49.853  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:49.945  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:50.039  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:50.396  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
+ 
+
+1/25/2022 12:38:50.793  DOCKLIGHT reports: Input buffer overflow on COM3
+Docklight/PC is too slow, some packets have been dropped.
