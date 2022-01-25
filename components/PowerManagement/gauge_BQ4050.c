@@ -532,8 +532,11 @@ void gauge_writeGoldenFile( void ) {
      * That means we need 8192/32 = 256 write commands, instead of allocating 256 * 8 bytes we can use the memory just next to the golden file
      * since it's 64k and we need only the first 8k, so there is enough memory
      */
+
+
     
-    ESP_LOGI(TAG, "Buring Golden Image");
+    ESP_LOGI(TAG, "Burning Golden Image skipped");
+    return;
 
     uint16_t current_address = Flash_Data_Access;
     uint32_t golden_img_index = 0;
