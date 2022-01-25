@@ -82,7 +82,7 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
             {
                 ESP_LOGI(TAG, "write failed: %u", err);
             }
-            ESP_LOGI(TAG, "\n\n\nwrite address: %02x", write_address);
+            // ESP_LOGI(TAG, "\n\n\nwrite address: %02x", write_address);
 
             // send MAC addressa
             err = i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true);
@@ -91,7 +91,7 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
             {
                 ESP_LOGI(TAG, "write failed: %u", err);
             }
-            ESP_LOGI(TAG, "MAC Block address: %02x", MAC_BLOCK_COMMAND);
+            // ESP_LOGI(TAG, "MAC Block address: %02x", MAC_BLOCK_COMMAND);
 
             // send number of bites to write to the mac
             err = i2c_master_write_byte(packet, total_byte_count, true);
@@ -100,7 +100,7 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
             {
                 ESP_LOGI(TAG, "write failed: %u", err);
             }
-            ESP_LOGI(TAG, "Total Bytes to write: %u", total_byte_count);
+            // ESP_LOGI(TAG, "Total Bytes to write: %u", total_byte_count);
 
             // send command
             err = i2c_master_write_byte(packet, (uint8_t)command, true);
@@ -109,14 +109,14 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
             {
                 ESP_LOGI(TAG, "write failed: %u", err);
             }
-            ESP_LOGI(TAG, "Command LSB: %02x", (uint8_t)command);
+            // ESP_LOGI(TAG, "Command LSB: %02x", (uint8_t)command);
             err = i2c_master_write_byte(packet, (uint8_t)(command >> 8), true);
             if( ESP_OK != err )
             {
                 ESP_LOGI(TAG, "write failed: %u", err);
             }
             ERROR_CHECK( TAG, err );
-            ESP_LOGI(TAG, "Command LSB: %02x", (uint8_t)(command >> 8));
+            // ESP_LOGI(TAG, "Command LSB: %02x", (uint8_t)(command >> 8));
 
             // send data
             for( uint8_t i = 0; i < size; i++ )
@@ -129,7 +129,7 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
                     ESP_LOGI(TAG, "write failed: %u", err);
                 }
                 ERROR_CHECK( TAG, err );
-                ESP_LOGI(TAG, "Writing data: %02x at index: %u", data_in[i], i);
+                // ESP_LOGI(TAG, "Writing data: %02x at index: %u", data_in[i], i);
             }
 
             err = i2c_master_stop( packet );
@@ -145,11 +145,11 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
                 if( ESP_OK != err )
                 {
                     // could not send 
-                    ESP_LOGW(TAG, "Error %u, i2c_master_cmd_begin, cmd LSB: %02x, cmd MSB: %02x, size: %u", err, (uint8_t)command, (uint8_t)(command >> 8), size );
+                    ESP_LOGW(TAG, "Error %u, i2c_master_cmd_begin,  register: %02x%02x, size: %u", err, (uint8_t)(command >> 8), (uint8_t)command, size );
                 }
                 else
                 {
-                    ESP_LOGI(TAG, "i2c_master_cmd_begin success");
+                    ESP_LOGW(TAG, "Success %u, i2c_master_cmd_begin, register: %02x%02x, size: %u", err, (uint8_t)(command >> 8), (uint8_t)command, size );
                 }
             }
         }
@@ -498,6 +498,19 @@ void gauge_init()
     uint8_t i = 0;
     uint8_t local_data_buffer[2];
 
+    // check the device operational status
+    uint32_t opStatus_bit_field = 0;
+    gauge_MACRead(MAC_OPERATIONSTATUS, bq4050_scratchpad);
+
+    opStatus_bit_field = (uint16_t)bq4050_scratchpad[0] | 
+                        ((uint16_t)bq4050_scratchpad[1] << 8) |
+                        ((uint16_t)bq4050_scratchpad[2] << 16) |
+                        ((uint16_t)bq4050_scratchpad[3] << 24);
+
+    ESP_LOGI(TAG, "Operation Status register data: %d", opStatus_bit_field );
+
+
+
     while( i < num_operations )
     {
         uint16_t current_cmd = init_command_set[i].address;
@@ -509,6 +522,7 @@ void gauge_init()
         {
             ESP_LOGI(TAG, "failed to write cmd: %04x, size: %u", current_cmd, current_cmd_size );
         }
+        i++;
     }
 }
 
