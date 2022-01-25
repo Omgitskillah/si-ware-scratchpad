@@ -82,7 +82,7 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
             {
                 ESP_LOGI(TAG, "write failed: %u", err);
             }
-            ESP_LOGI(TAG, "write address: %02x", write_address);
+            ESP_LOGI(TAG, "\n\n\nwrite address: %02x", write_address);
 
             // send MAC addressa
             err = i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true);
@@ -146,6 +146,10 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
                 {
                     // could not send 
                     ESP_LOGW(TAG, "Error %u, i2c_master_cmd_begin, cmd LSB: %02x, cmd MSB: %02x, size: %u", err, (uint8_t)command, (uint8_t)(command >> 8), size );
+                }
+                else
+                {
+                    ESP_LOGI(TAG, "i2c_master_cmd_begin success");
                 }
             }
         }
