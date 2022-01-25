@@ -76,14 +76,48 @@ static esp_err_t gauge_MACWrite(uint16_t command, uint8_t *data_in, uint8_t size
             uint8_t command_byte_count = sizeof(command); // this will always be 2
             uint8_t total_byte_count = size + command_byte_count;
             // send write address 
-            ERROR_CHECK( TAG, i2c_master_write_byte( packet, write_address, true) );
-            // send MAC address
-            ERROR_CHECK( TAG, i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true) );
+            err = i2c_master_write_byte( packet, write_address, true);
+            ERROR_CHECK( TAG, err );
+            if( ESP_OK != err )
+            {
+                ESP_LOGI(TAG, "write failed: %u", err);
+            }
+            ESP_LOGI(TAG, "write address: %02x", write_address);
+
+            // send MAC addressa
+            err = i2c_master_write_byte(packet, MAC_BLOCK_COMMAND, true);
+            ERROR_CHECK( TAG, err );
+            if( ESP_OK != err )
+            {
+                ESP_LOGI(TAG, "write failed: %u", err);
+            }
+            ESP_LOGI(TAG, "MAC Block address: %02x", MAC_BLOCK_COMMAND);
+
             // send number of bites to write to the mac
-            ERROR_CHECK( TAG, i2c_master_write_byte(packet, total_byte_count, true) );
+            err = i2c_master_write_byte(packet, total_byte_count, true);
+            ERROR_CHECK( TAG, err );
+            if( ESP_OK != err )
+            {
+                ESP_LOGI(TAG, "write failed: %u", err);
+            }
+            ESP_LOGI(TAG, "Total Bytes to write: %u", total_byte_count);
+
             // send command
-            ERROR_CHECK( TAG, i2c_master_write_byte(packet, (uint8_t)command, true) );
-            ERROR_CHECK( TAG, i2c_master_write_byte(packet, (uint8_t)(command >> 8), true) );
+            err = i2c_master_write_byte(packet, (uint8_t)command, true);
+            ERROR_CHECK( TAG, err );
+            if( ESP_OK != err )
+            {
+                ESP_LOGI(TAG, "write failed: %u", err);
+            }
+            ESP_LOGI(TAG, "Command LSB: %02x", (uint8_t)command);
+            err = i2c_master_write_byte(packet, (uint8_t)(command >> 8), true);
+            if( ESP_OK != err )
+            {
+                ESP_LOGI(TAG, "write failed: %u", err);
+            }
+            ERROR_CHECK( TAG, err );
+            ESP_LOGI(TAG, "Command LSB: %02x", (uint8_t)(command >> 8));
+
             // send data
             for( uint8_t i = 0; i < size; i++ )
             {
@@ -216,7 +250,8 @@ static esp_err_t gauge_MACRead(uint16_t command, uint8_t *data_out)
     return err;
 }
 
-static uint16_t gauge_readWord(uint8_t command) {
+static uint16_t gauge_readWord(uint8_t command) 
+{
     uint16_t data_out;
 
     i2c_cmd_handle_t packet = i2c_cmd_link_create();
@@ -237,7 +272,8 @@ static uint16_t gauge_readWord(uint8_t command) {
     return data_out;
 }
 
-void gauge_readBatteryInfo(GaugeInfo_t *gaugeInfo) {
+void gauge_readBatteryInfo(GaugeInfo_t *gaugeInfo) 
+{
     gaugeInfo->battVoltage = gauge_readWord(SBS_VOLTAGE);
     gaugeInfo->cellVoltage1 = gauge_readWord(SBS_CELLVOLTAGE1);
     gaugeInfo->cellVoltage2 = gauge_readWord(SBS_CELLVOLTAGE2);
@@ -283,7 +319,9 @@ void gauge_readBatteryInfo(GaugeInfo_t *gaugeInfo) {
     gauge_MACRead(Flash_Cycle_Count, bq4050_scratchpad);
     gaugeInfo->cycleCount = (uint16_t)bq4050_scratchpad[0] | ((uint16_t)bq4050_scratchpad[1] << 8);
 }
-void gauge_read_life_time_data(life_time_data_t* life_time_data){
+
+void gauge_read_life_time_data(life_time_data_t* life_time_data)
+{
     uint8_t *data_ptr = (uint8_t*)life_time_data;
     ESP_LOGI(TAG,"lifeTimeData size is %d",sizeof(life_time_data_t));
     gauge_MACRead(MAC_LIFETIMEDATABLOCK1,data_ptr);
@@ -293,7 +331,9 @@ void gauge_read_life_time_data(life_time_data_t* life_time_data){
     }
 
 }
-void gauge_print_life_time_data(life_time_data_t * life_time_data){
+
+void gauge_print_life_time_data(life_time_data_t * life_time_data)
+{
     ESP_LOGI(TAG, "________________Life Time Data ________________________");
     ESP_LOGI(TAG,"cell_1_max_voltage = 0x%x",life_time_data -> cell_1_max_voltage);
     ESP_LOGI(TAG,"cell_2_max_voltage = 0x%x",life_time_data -> cell_2_max_voltage);
@@ -357,10 +397,10 @@ void gauge_print_life_time_data(life_time_data_t * life_time_data){
     ESP_LOGI(TAG,"num_valid_charge_term = 0x%x",life_time_data -> num_valid_charge_term);
     ESP_LOGI(TAG,"last_valid_charge_term = 0x%x",life_time_data -> last_valid_charge_term);
     ESP_LOGI(TAG, "________________________________________");
-
 }
 
-ScannerError_t gauge_selfTest() {
+ScannerError_t gauge_selfTest() 
+{
     uint32_t mfgStatus;
     gauge_MACRead(MAC_MANUFACTURINGSTATUS, (uint8_t *) &mfgStatus);
 
@@ -370,7 +410,8 @@ ScannerError_t gauge_selfTest() {
         return GAUGE_SELF_TEST_FAILED;
 }
 
-void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo) {
+void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo) 
+{
     ESP_LOGI(TAG, "________________________________________");
     ESP_LOGI(TAG, "battVoltage = %d", gaugeInfo->battVoltage);
     ESP_LOGI(TAG, "Current = %d", gaugeInfo->current);
@@ -398,7 +439,8 @@ void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo) {
     ESP_LOGI(TAG, "----------------------------------------");
 }
 
-void gauge_deviceReset() {
+void gauge_deviceReset() 
+{
     if( ESP_OK == gauge_MACWrite( MAC_DEVICERESET, NULL, 0 ) )
     {
         ESP_LOGI(TAG, "RESET GAUGE SUCCESS");
@@ -410,7 +452,8 @@ void gauge_deviceReset() {
     vTaskDelay(1000 / portTICK_RATE_MS);
 }
 
-void gauge_disable() {
+void gauge_disable() 
+{
     uint8_t data[] = { 0x00, 0x00 };
     if( ESP_OK == gauge_MACWrite( Flash_MfgInit, data, sizeof(data) ) )
     {
@@ -422,7 +465,8 @@ void gauge_disable() {
     }
 }
 
-void gauge_enable(){
+void gauge_enable()
+{
     uint8_t data[] = { 0x18, 0x00 };
     if( ESP_OK == gauge_MACWrite( Flash_MfgInit, data, sizeof(data) ) )
     {
@@ -434,7 +478,8 @@ void gauge_enable(){
     }
 }
 
-void gauge_init() {
+void gauge_init() 
+{
 
     uint8_t num_operations = sizeof(init_command_set) / sizeof(init_command_set[0]);
 
