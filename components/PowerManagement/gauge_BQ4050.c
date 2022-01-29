@@ -411,17 +411,6 @@ void gauge_print_life_time_data(life_time_data_t * life_time_data)
     ESP_LOGI(TAG, "________________________________________");
 }
 
-ScannerError_t gauge_selfTest() 
-{
-    uint32_t mfgStatus;
-    gauge_MACRead(MAC_MANUFACTURINGSTATUS, (uint8_t *) &mfgStatus);
-
-    if ((mfgStatus & 0x10) != 0)
-        return NoError;
-    else
-        return GAUGE_SELF_TEST_FAILED;
-}
-
 void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo) 
 {
     ESP_LOGI(TAG, "________________________________________");
@@ -449,6 +438,20 @@ void gauge_printBatteryInfo(GaugeInfo_t *gaugeInfo)
     ESP_LOGI(TAG,"CycleCount = 0x%0x",gaugeInfo->cycleCount);
     ESP_LOGI(TAG,"Size = %d",sizeof(GaugeInfo_t));
     ESP_LOGI(TAG, "----------------------------------------");
+}
+
+ScannerError_t gauge_selfTest() 
+{
+    ScannerError_t error = NoError;
+    uint32_t mfgStatus;
+    gauge_MACRead(MAC_MANUFACTURINGSTATUS, (uint8_t *) &mfgStatus);
+
+    if ((mfgStatus & 0x10) == 0)
+    {
+        error = GAUGE_SELF_TEST_FAILED;
+    }
+    
+    return error;
 }
 
 void gauge_deviceReset() 
@@ -497,9 +500,9 @@ void gauge_init()
 
     uint8_t i = 0;
     uint8_t local_data_buffer[2];
+    uint32_t opStatus_bit_field = 0;
 
     // check the device operational status
-    uint32_t opStatus_bit_field = 0;
     gauge_MACRead(MAC_OPERATIONSTATUS, bq4050_scratchpad);
 
     opStatus_bit_field = (uint16_t)bq4050_scratchpad[0] | 
@@ -532,9 +535,6 @@ void gauge_writeGoldenFile( void ) {
      * That means we need 8192/32 = 256 write commands, instead of allocating 256 * 8 bytes we can use the memory just next to the golden file
      * since it's 64k and we need only the first 8k, so there is enough memory
      */
-
-
-    
     ESP_LOGI(TAG, "Burning Golden Image skipped");
     return;
 

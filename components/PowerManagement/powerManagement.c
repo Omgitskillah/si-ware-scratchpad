@@ -16,75 +16,97 @@ static ChargerState_t power_management_charger_state = ChargerUnplugged;
 static GaugeInfo_t power_management_gauge_info = {0};
 static oldFormatGaugeInfo_t power_management_old_format_gauge_info = {0};
 static life_time_data_t power_management_life_time_data;
-//static RTC_DATA_ATTR uint8_t sleep_while_charging = false;
 
+/* IO config */
+#define IO_HIGH 1
+#define IO_LOW  0
+// TODO (CA): move this out of application level code
+const gpio_config_t io_chrg_ok_conf = { .mode = GPIO_MODE_INPUT,
+                                        .intr_type = GPIO_INTR_ANYEDGE,
+                                        .pin_bit_mask = (1ULL << IO_CHRG_OK),
+                                        .pull_up_en = GPIO_PULLUP_DISABLE,
+                                        .pull_down_en = GPIO_PULLDOWN_ENABLE, };
 
-static void IRAM_ATTR PM_chargeOK_ISR(void *arg) {
+const gpio_config_t io_pm_gauge_pres_conf = { .mode = GPIO_MODE_INPUT,
+                                              .intr_type = GPIO_INTR_DISABLE,
+                                              .pin_bit_mask = (1ULL << IO_PM_GAUGE_PRES),
+                                              .pull_up_en = GPIO_PULLUP_DISABLE,
+                                              .pull_down_en = GPIO_PULLDOWN_ENABLE, };   //already pulled down externally
+
+const i2c_config_t io_pm_i2c_conf = { .mode = I2C_MODE_MASTER,
+                                      .scl_io_num = IO_PM_I2C_SCL,
+                                      .sda_io_num = IO_PM_I2C_SDA,
+                                      .scl_pullup_en = GPIO_PULLUP_ENABLE,
+                                      .sda_pullup_en = GPIO_PULLUP_ENABLE,
+                                      .master = { .clk_speed = PM_I2C_FREQ_HZ, },
+                                      .clk_flags = 0, };
+
+static void IRAM_ATTR PM_chargeOK_ISR(void *arg) 
+{
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    xSemaphoreGiveFromISR(power_management_charger_smphr, &xHigherPriorityTaskWoken);
-    if (xHigherPriorityTaskWoken)
+    if( pdTRUE != xSemaphoreGiveFromISR(power_management_charger_smphr, &xHigherPriorityTaskWoken))
+    {
+        ESP_LOGI( TAG,"xSemaphoreGiveFromISR failed" );
+    }
+
+    if ( pdTRUE == xHigherPriorityTaskWoken )
+    {
         portYIELD_FROM_ISR();
+    }
 }
 
-static void PM_chargeOKInit() {
-    gpio_config_t conf = {
-            .mode = GPIO_MODE_INPUT,
-            .intr_type = GPIO_INTR_ANYEDGE,
-            .pin_bit_mask = (1ULL << IO_CHRG_OK),
-            .pull_up_en = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_ENABLE,
-    };
-    gpio_config(&conf);
-
-    // gpio_install_isr_service(0); //should be installed before
+static void PM_chargeOKInit( void ) 
+{
+    // TODO (CA):  move this out of application level code
+    gpio_config( &io_chrg_ok_conf );
     gpio_isr_handler_add(IO_CHRG_OK, PM_chargeOK_ISR, (void *) IO_CHRG_OK);
     esp_sleep_enable_ext1_wakeup((1ULL << IO_CHRG_OK), ESP_EXT1_WAKEUP_ANY_HIGH);
 }
-static void PM_presPinInit(){
+
+static void PM_presPinInit( void )
+{
     static bool initialized = false;
-    if(initialized){
-        return;
-    }
-    if(centralManager_get_mother_board_version() >= MOTHER_BOARD_VERSION_H){
-        gpio_config_t conf = {
-                .mode = GPIO_MODE_INPUT,
-                .intr_type = GPIO_INTR_DISABLE,
-                .pin_bit_mask = (1ULL << IO_PM_GAUGE_PRES),
-                .pull_up_en = GPIO_PULLUP_DISABLE,
-                .pull_down_en = GPIO_PULLDOWN_ENABLE,   //already pulled down externally
-        };
-        gpio_config(&conf);
+
+    if( (false == initialized) )
+    {
+        // TODO (CA): should initialize all pins at the same time on system init
+        gpio_config(&io_pm_gauge_pres_conf);
         initialized = true;
     }
 }
 
-static void PM_i2cInit() {
-    i2c_config_t conf = {
-            .mode = I2C_MODE_MASTER,
-            .scl_io_num = IO_PM_I2C_SCL,
-            .sda_io_num = IO_PM_I2C_SDA,
-            .scl_pullup_en = GPIO_PULLUP_ENABLE,
-            .sda_pullup_en = GPIO_PULLUP_ENABLE,
-            .master = {
-                    .clk_speed = PM_I2C_FREQ_HZ,
-            },
-            .clk_flags = 0,
-    };
-
-    ERROR_CHECK(TAG, i2c_param_config(PM_I2C_NUM, &conf));
-    // vTaskDelay(pdMS_TO_TICKS(500));
-    ERROR_CHECK(TAG, i2c_driver_install(PM_I2C_NUM, conf.mode, 0, 0, 0));
+static void PM_i2cInit( void ) 
+{
+    // TODO (CA): should initialize all pins at the same time on system init
+    ERROR_CHECK(TAG, i2c_param_config(PM_I2C_NUM, &io_pm_i2c_conf));
+    ERROR_CHECK(TAG, i2c_driver_install(PM_I2C_NUM, io_pm_i2c_conf.mode, 0, 0, 0));
 }
-static void power_management_toggle_pres_pin(){
-    if(centralManager_get_mother_board_version() >= MOTHER_BOARD_VERSION_H){
-        PM_presPinInit();
-        gpio_set_level(IO_PM_GAUGE_PRES,1);
+
+static void power_management_toggle_pres_pin( void )
+{
+    static bool initialized = false;
+
+    if(centralManager_get_mother_board_version() >= MOTHER_BOARD_VERSION_H)
+    {
+        
+        if( (false == initialized) )
+        {
+            // TODO (CA): should initialize all pins at the same time on system init
+            gpio_config(&io_pm_gauge_pres_conf);
+            gpio_set_level( IO_PM_GAUGE_PRES, IO_LOW );
+            initialized = true;
+        }
+
+        // toggle the gauge press pin
+        gpio_set_level( IO_PM_GAUGE_PRES, IO_HIGH );
         vTaskDelay(3);
-        gpio_set_level(IO_PM_GAUGE_PRES,0);
+        gpio_set_level( IO_PM_GAUGE_PRES, IO_LOW );
     }
 }
-static uint32_t power_management_safety_status_check(const GaugeInfo_t * gauge_info){
+
+static uint32_t power_management_safety_status_check( const GaugeInfo_t * gauge_info )
+{
     typedef struct {
         safety_status_flag_t safety_status_flag;
         safety_status_error_type_t safety_status_error_bit;
@@ -116,7 +138,6 @@ static uint32_t power_management_safety_status_check(const GaugeInfo_t * gauge_i
             {.safety_status_flag = SAFETY_STATUS_FLAG_CHGV,.safety_status_error_bit = SAFETY_STATUS_OVER_CHARGING_VOLTAGE,.safety_status_error_code = OVER_CHARGING_VOLTAGE_ERROR, .safety_status_action = SAFETY_STATUS_ACTION_REPORT},
             {.safety_status_flag = SAFETY_STATUS_FLAG_CHGC,.safety_status_error_bit = SAFETY_STATUS_OVER_CHARGING_CURRENT,.safety_status_error_code =OVER_CHARGING_CURRENT_ERROR , .safety_status_action = SAFETY_STATUS_ACTION_REPORT},
             {.safety_status_flag = SAFETY_STATUS_FLAG_PCHGC,.safety_status_error_bit = SAFETY_STATUS_OVER_PRE_CHARGING_CURRENT,.safety_status_error_code =OVER_PRE_CHARGING_CURRENT_ERROR , .safety_status_action = SAFETY_STATUS_ACTION_REPORT},
-
     };
     uint32_t num_operations = sizeof(safety_status_operations) / sizeof (safety_status_operation_t);
     for (uint32_t i = 0; i < num_operations; ++i) {
@@ -170,7 +191,6 @@ _Noreturn static void PM_powertask(void *parameters) {
         gauge_read_life_time_data(&power_management_life_time_data);
         gauge_readBatteryInfo(&power_management_gauge_info);
         gauge_printBatteryInfo(&power_management_gauge_info);
-//        gauge_print_life_time_data(&power_management_life_time_data);
 
         charger_readCurrent();
 
@@ -260,8 +280,6 @@ void PM_sleep(uint8_t emergencyShutdown) {
         //sleep_while_charging = false;
         esp_sleep_enable_ext1_wakeup((1ULL << IO_CHRG_OK), ESP_EXT1_WAKEUP_ANY_HIGH);
     }
-//    gauge_disable();
-//    gauge_deviceReset();
 
     ESP_ERROR_CHECK(gpio_set_level(IO_OLED_DCDCEN, 0));
     ESP_ERROR_CHECK(gpio_set_level(IO_NS_ENABLE, 0));
